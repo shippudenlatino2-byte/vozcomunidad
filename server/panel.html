@@ -72,7 +72,11 @@
       border-radius: 10px;
       padding: 12px;
     }
-    .item { margin-bottom: 12px; }
+    .datos { display: grid; grid-template-columns: 160px 1fr; gap: 8px 12px; margin: 14px 0 0; }
+    .datos dt { color: var(--suave); }
+    .datos dd { margin: 0; }
+    .nota { border-top: 1px solid var(--linea); margin-top: 14px; padding-top: 12px; }
+    .nota p { margin: 0 0 8px; }
     .tope { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
     .nombre { margin: 0; font-size: 18px; }
     .meta { margin: 4px 0 0; color: var(--suave); font-size: 14px; }
@@ -153,7 +157,7 @@
       const barrio = filtroBarrio.value;
       const tipo = filtroTipo.value;
       return respuestas.filter((item) => {
-        const coincideTexto = !texto || [item.nombre, item.telefono, item.barrio, item.opinion]
+        const coincideTexto = !texto || [item.nombre, item.telefono, item.barrio, item.direccion, item.localidad, item.opinion]
           .join(" ").toLowerCase().includes(texto);
         const coincideBarrio = !barrio || item.barrio === barrio;
         const coincideTipo = !tipo || (tipo === "audio" ? item.tieneAudio : !item.tieneAudio);
@@ -177,14 +181,6 @@
           <p class="numero">${valor}</p>
         </article>
       `).join("");
-      lista.querySelectorAll("audio").forEach((reproductor) => {
-        reproductor.addEventListener("error", () => {
-          const aviso = document.createElement("p");
-          aviso.className = "aviso";
-          aviso.textContent = "La encuesta marca audio, pero el archivo no está disponible.";
-          reproductor.replaceWith(aviso);
-        });
-      });
     }
 
     function pintarBarrios() {
@@ -221,30 +217,74 @@
       filtroBarrio.value = nombres.includes(elegido) ? elegido : "";
     }
 
+    function etiqueta(valor, mapa) {
+      if (!valor) return "No indicado";
+      return mapa[valor] || valor;
+    }
+
+    function dato(titulo, valor) {
+      return `<dt>${titulo}</dt><dd>${esc(valor || "No indicado")}</dd>`;
+    }
+
+    function notaDe(item) {
+      const audio = item.tieneAudio
+        ? `<audio controls preload="metadata" aria-label="Nota de voz de ${esc(item.nombre)}" src="/api/respuestas/${esc(item.id)}/audio"></audio>`
+        : `<p class="aviso">Sin nota de voz.</p>`;
+      const categoria = etiqueta(item.categoria, {
+        SEGURIDAD: "Seguridad",
+        SERVICIOS: "Servicios públicos",
+        INFRAESTRUCTURA: "Infraestructura",
+        AMBIENTE: "Medio ambiente",
+      });
+      return `
+        <div class="nota">
+          <p><strong>${esc(item.momento || "Sin fecha")}</strong> · ${esc(categoria)}</p>
+          <p>${esc(item.opinion || "Sin opinión")}</p>
+          ${audio}
+        </div>
+      `;
+    }
+
     function pintarLista() {
       const items = visibles();
       if (!items.length) {
         lista.innerHTML = `<p class="vacio">No hay encuestas con ese filtro.</p>`;
         return;
       }
-      lista.innerHTML = items.map((item) => {
-        const audio = item.tieneAudio
-          ? `<audio controls preload="none" aria-label="Nota de voz de ${esc(item.nombre)}" src="/api/respuestas/${esc(item.id)}/audio"></audio>`
-          : `<p class="aviso">Sin nota de voz.</p>`;
+      const grupos = new Map();
+      items.forEach((item) => {
+        const clave = `${(item.telefono || "").replace(/\D/g, "")}|${(item.nombre || "").trim().toLowerCase()}`;
+        if (!grupos.has(clave)) grupos.set(clave, []);
+        grupos.get(clave).push(item);
+      });
+      lista.innerHTML = [...grupos.values()].map((grupo) => {
+        const reciente = grupo[0];
+        const canal = etiqueta(reciente.canal, { WHATSAPP: "WhatsApp", LLAMADA: "Llamada" });
         return `
-          <article class="tarjeta item">
+          <article class="tarjeta usuario">
             <div class="tope">
-              <div>
-                <h2 class="nombre">${esc(item.nombre)}</h2>
-                <p class="meta">${esc(item.telefono)} · ${esc(item.barrio)} · ${esc(item.momento)}</p>
-              </div>
-              <span class="pastilla ${item.tieneAudio ? "" : "texto"}">${item.tieneAudio ? "Audio " + esc(item.duracionSeg) + " s" : "Texto"}</span>
+              <h2 class="nombre">${esc(reciente.nombre || "Sin nombre")}</h2>
+              <span class="pastilla">${grupo.length === 1 ? "1 encuesta" : grupo.length + " encuestas"}</span>
             </div>
-            <p class="opinion">${esc(item.opinion)}</p>
-            ${audio}
+            <dl class="datos">
+              ${dato("Teléfono", reciente.telefono)}
+              ${dato("Contacto", canal)}
+              ${dato("Dirección", reciente.direccion)}
+              ${dato("Barrio", reciente.barrio)}
+              ${dato("Localidad", reciente.localidad)}
+            </dl>
+            ${grupo.map(notaDe).join("")}
           </article>
         `;
       }).join("");
+      lista.querySelectorAll("audio").forEach((reproductor) => {
+        reproductor.addEventListener("error", () => {
+          const aviso = document.createElement("p");
+          aviso.className = "aviso";
+          aviso.textContent = "La nota de voz no está disponible para reproducir.";
+          reproductor.replaceWith(aviso);
+        });
+      });
     }
 
     function pintar() {

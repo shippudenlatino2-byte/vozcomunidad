@@ -14,6 +14,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 class EncuestaViewModel(application: android.app.Application) : AndroidViewModel(application) {
     var nombre by mutableStateOf("")
@@ -42,6 +46,7 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
     private var archivoNota: File? = null
     private var reproductor: MediaPlayer? = null
     private var generacionAudio = 0
+    private val tareasGrabacion = Executors.newSingleThreadExecutor()
 
     val localidades = listOf(
         "Comuna / Localidad Centro",
@@ -209,29 +214,34 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
             alTerminar(false)
             return
         }
-        finalizarNota()
-        val archivo = archivoNota?.takeIf { notaGuardada() }
-        if ((segundos > 0 || audioListo) && archivo == null) {
-            avisar("La nota de voz no quedó guardada. Grábala de nuevo")
-            alTerminar(false)
-            return
-        }
-        val borrador = Respuesta(
-            id = "",
-            nombre = nombre.trim(),
-            telefono = telefono.trim(),
-            barrio = barrio.ifBlank { localidad },
-            opinion = opinion.trim(),
-            momento = "Ahora",
-            tieneAudio = archivo != null,
-            duracionSeg = if (archivo != null) segundos else 0,
-            estado = "Enviada a la comunidad",
-            tono = Tono.EXITO,
-        )
         enviando = true
+        avisar("Guardando en la comunidad…")
+        val duracion = segundos
+        val habiaAudio = grabando || audioListo || segundos > 0
         viewModelScope.launch {
             val resultado = withContext(Dispatchers.IO) {
                 runCatching {
+                    finalizarNota()
+                    val archivo = archivoNota?.takeIf { notaGuardada() }
+                    if (habiaAudio && archivo == null) {
+                        error("sin-audio")
+                    }
+                    val borrador = Respuesta(
+                        id = "",
+                        nombre = nombre.trim(),
+                        telefono = telefono.trim(),
+                        barrio = barrio.trim().ifBlank { localidad.trim() },
+                        opinion = opinion.trim(),
+                        momento = "Ahora",
+                        tieneAudio = archivo != null,
+                        duracionSeg = if (archivo != null) duracion.coerceAtLeast(1) else 0,
+                        estado = "Enviada a la comunidad",
+                        tono = Tono.EXITO,
+                        canal = canal.name,
+                        direccion = direccion.trim(),
+                        localidad = localidad.trim(),
+                        categoria = categoria?.name ?: "",
+                    )
                     val guardada = ComunidadApi.publicar(borrador, archivo?.readBytes())
                     if (archivo != null) guardarCopia(guardada.id, archivo)
                     guardada
@@ -248,8 +258,11 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
                     )
                     alTerminar(true)
                 }
-                .onFailure {
-                    avisar("No se pudo enviar. Revisa la conexión e inténtalo de nuevo")
+                .onFailure { error ->
+                    avisar(
+                        if (error.message == "sin-audio") "La nota de voz no quedó guardada. Grábala de nuevo"
+                        else "No se pudo guardar. Espera un momento y vuelve a intentar",
+                    )
                     alTerminar(false)
                 }
         }
@@ -279,6 +292,7 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
     override fun onCleared() {
         liberarGrabador()
         detenerReproduccion()
+        tareasGrabacion.shutdownNow()
         super.onCleared()
     }
 
@@ -288,39 +302,45 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
         if (archivo.exists()) archivo.delete()
         segundos = 0
         audioListo = false
-        val recorder = nuevoGrabador()
-        return try {
-            recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
-            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            recorder.setAudioEncodingBitRate(64_000)
-            recorder.setAudioSamplingRate(44_100)
-            recorder.setMaxDuration(180_000)
-            recorder.setOutputFile(archivo.absolutePath)
-            recorder.prepare()
-            recorder.start()
-            grabador = recorder
-            archivoNota = archivo
-            grabando = true
-            true
+        val recorder = try {
+            enGrabacion {
+                val creado = nuevoGrabador()
+                creado.setAudioSource(MediaRecorder.AudioSource.MIC)
+                creado.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                creado.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                creado.setAudioEncodingBitRate(64_000)
+                creado.setAudioSamplingRate(44_100)
+                creado.setMaxDuration(180_000)
+                creado.setOutputFile(archivo.absolutePath)
+                creado.prepare()
+                creado.start()
+                creado
+            }
         } catch (_: Exception) {
-            runCatching { recorder.release() }
             archivo.delete()
             grabando = false
-            false
+            return false
         }
+        grabador = recorder
+        archivoNota = archivo
+        grabando = true
+        return true
     }
 
     private fun pausarNota() {
-        runCatching { grabador?.pause() }
+        val recorder = grabador
+        if (recorder != null) {
+            runCatching { enGrabacion { recorder.pause() } }
+        }
         grabando = false
         if (segundos == 0) segundos = 1
         audioListo = true
     }
 
     private fun reanudarNota(): Boolean {
+        val recorder = grabador ?: return false
         return try {
-            grabador?.resume()
+            enGrabacion { recorder.resume() }
             grabando = true
             true
         } catch (_: Exception) {
@@ -340,9 +360,24 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
         val recorder = grabador
         grabador = null
         grabando = false
-        if (recorder != null) {
-            runCatching { recorder.stop() }
-            runCatching { recorder.release() }
+        if (recorder == null) return
+        runCatching {
+            enGrabacion(6_000) {
+                runCatching { recorder.stop() }
+                runCatching { recorder.release() }
+            }
+        }
+    }
+
+    private fun <T> enGrabacion(esperaMs: Long = 8_000, bloque: () -> T): T {
+        val futuro = tareasGrabacion.submit(bloque)
+        try {
+            return futuro.get(esperaMs, TimeUnit.MILLISECONDS)
+        } catch (error: TimeoutException) {
+            futuro.cancel(true)
+            throw error
+        } catch (error: ExecutionException) {
+            throw error.cause ?: error
         }
     }
 

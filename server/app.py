@@ -86,12 +86,19 @@ class Almacen:
         with self.sesion() as conexion:
             conexion.execute(sql)
             self.asegurar_audio(conexion)
+            for nombre in ("canal", "direccion", "localidad", "categoria"):
+                self.asegurar_texto(conexion, nombre)
 
     def asegurar_audio(self, conexion):
         if "audio" in self.columnas(conexion):
             return
         tipo = "BYTEA" if self.postgres else "BLOB"
         conexion.execute(f"ALTER TABLE respuestas ADD COLUMN audio {tipo}")
+
+    def asegurar_texto(self, conexion, nombre):
+        if nombre in self.columnas(conexion):
+            return
+        conexion.execute(f"ALTER TABLE respuestas ADD COLUMN {nombre} TEXT")
 
     def columnas(self, conexion):
         if self.postgres:
@@ -104,8 +111,9 @@ class Almacen:
 
     def listar(self):
         consulta = """
-            SELECT id, nombre, telefono, barrio, opinion, momento, creado_en,
-                   tiene_audio, duracion_seg, estado, tono, acento, urgente
+            SELECT id, nombre, telefono, barrio, direccion, localidad, canal, categoria,
+                   opinion, momento, creado_en, tiene_audio, duracion_seg, estado, tono,
+                   acento, urgente
             FROM respuestas
             ORDER BY creado_en DESC
         """
@@ -130,7 +138,11 @@ class Almacen:
             "id": uuid4().hex,
             "nombre": nombre,
             "telefono": telefono,
-            "barrio": campo(datos.get("barrio"), 80) or "Sin barrio",
+            "barrio": campo(datos.get("barrio"), 80),
+            "direccion": campo(datos.get("direccion"), 160),
+            "localidad": campo(datos.get("localidad"), 80),
+            "canal": campo(datos.get("canal"), 40),
+            "categoria": campo(datos.get("categoria"), 40),
             "opinion": opinion,
             "momento": momento_local(),
             "creado_en": datetime.now(ZoneInfo("UTC")).isoformat(),
@@ -189,7 +201,11 @@ def fila_a_json(fila):
         "id": fila["id"],
         "nombre": fila["nombre"],
         "telefono": fila["telefono"],
-        "barrio": fila["barrio"],
+        "barrio": fila.get("barrio") or "",
+        "direccion": fila.get("direccion") or "",
+        "localidad": fila.get("localidad") or "",
+        "canal": fila.get("canal") or "",
+        "categoria": fila.get("categoria") or "",
         "opinion": fila["opinion"],
         "momento": fila["momento"],
         "tieneAudio": bool(fila["tiene_audio"]),
@@ -242,7 +258,13 @@ def crear_respuesta():
 
 @app.get("/salud")
 def salud():
-    return jsonify(audio=True, version=3)
+    return jsonify(audio=True, version=4)
+
+
+def tipo_audio(contenido):
+    if contenido.startswith(b"RIFF"):
+        return "audio/wav"
+    return "audio/mp4"
 
 
 @app.get("/api/respuestas/<identificador>/audio")
@@ -250,4 +272,14 @@ def servir_audio(identificador):
     contenido = almacen.leer_audio(identificador)
     if not contenido:
         return jsonify(error="Esta respuesta no tiene audio"), 404
-    return Response(contenido, mimetype="audio/mp4")
+    return Response(
+        contenido,
+        mimetype=tipo_audio(contenido),
+        headers={
+            "Content-Length": str(len(contenido)),
+            "Accept-Ranges": "bytes",
+            "Content-Disposition": "inline; filename=" + (
+                "nota-de-voz.wav" if contenido.startswith(b"RIFF") else "nota-de-voz.m4a"
+            ),
+        },
+    )

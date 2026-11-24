@@ -25,6 +25,10 @@ data class Respuesta(
     val tono: Tono,
     val acento: Acento = Acento.VERDE,
     val urgente: Boolean = false,
+    val canal: String = "",
+    val direccion: String = "",
+    val localidad: String = "",
+    val categoria: String = "",
 )
 
 fun formatoTiempo(segundos: Int): String {
