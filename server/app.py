@@ -328,7 +328,7 @@ def borrar_respuestas():
 
 @app.get("/salud")
 def salud():
-    return jsonify(audio=True, version=6)
+    return jsonify(audio=True, version=7)
 
 
 def tipo_audio(contenido):
