@@ -36,10 +36,6 @@
     .marca { margin: 0; color: var(--azul); font-weight: 700; letter-spacing: 0.04em; font-size: 13px; }
     h1 { margin: 4px 0 0; font-size: 28px; }
     .sub { margin: 6px 0 0; color: var(--suave); }
-    button, select, input {
-      font: inherit;
-      color: var(--texto);
-    }
     button {
       background: var(--azul);
       color: white;
@@ -48,6 +44,11 @@
       padding: 10px 14px;
       cursor: pointer;
     }
+    button.secundario { background: white; color: var(--texto); border: 1px solid var(--linea); }
+    button.peligro { background: #b42318; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .acciones { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .marca-check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
     main { padding: 12px 28px 40px; }
     .cifras, .filtros { display: grid; gap: 12px; }
     .cifras { grid-template-columns: repeat(4, 1fr); margin-bottom: 16px; }
@@ -65,7 +66,7 @@
     .riel { height: 10px; background: var(--azul-suave); border-radius: 99px; overflow: hidden; }
     .relleno { height: 100%; background: var(--azul); border-radius: 99px; }
     .filtros { grid-template-columns: 1.6fr 0.7fr 0.7fr; margin-bottom: 16px; }
-    input, select {
+    input:not([type="checkbox"]), select {
       width: 100%;
       background: white;
       border: 1px solid var(--linea);
@@ -131,6 +132,13 @@
         <option value="texto">Solo texto</option>
       </select>
     </section>
+    <div class="acciones">
+      <label class="marca-check">
+        <input id="elegir-visibles" type="checkbox">
+        Seleccionar visibles
+      </label>
+      <button id="eliminar" type="button" class="peligro" disabled>Eliminar seleccionadas</button>
+    </div>
     <section id="lista"></section>
     <p id="estado"></p>
   </main>
@@ -145,6 +153,9 @@
     const filtroBarrio = document.querySelector("#filtro-barrio");
     const filtroTipo = document.querySelector("#filtro-tipo");
     let respuestas = [];
+    const seleccion = new Set();
+    const botonEliminar = document.querySelector("#eliminar");
+    const elegirVisibles = document.querySelector("#elegir-visibles");
 
     function esc(valor) {
       return String(valor ?? "").replace(/[&<>"']/g, (letra) => ({
@@ -238,6 +249,10 @@
       });
       return `
         <div class="nota">
+          <label class="marca-check">
+            <input class="elegir" type="checkbox" value="${esc(item.id)}" ${seleccion.has(item.id) ? "checked" : ""}>
+            Seleccionar
+          </label>
           <p><strong>${esc(item.momento || "Sin fecha")}</strong> · ${esc(categoria)}</p>
           <p>${esc(item.opinion || "Sin opinión")}</p>
           ${audio}
@@ -260,11 +275,16 @@
       lista.innerHTML = [...grupos.values()].map((grupo) => {
         const reciente = grupo[0];
         const canal = etiqueta(reciente.canal, { WHATSAPP: "WhatsApp", LLAMADA: "Llamada" });
+        const ids = grupo.map((item) => item.id).join(",");
+        const todas = grupo.every((item) => seleccion.has(item.id));
         return `
           <article class="tarjeta usuario">
             <div class="tope">
               <h2 class="nombre">${esc(reciente.nombre || "Sin nombre")}</h2>
-              <span class="pastilla">${grupo.length === 1 ? "1 encuesta" : grupo.length + " encuestas"}</span>
+              <label class="marca-check">
+                <input class="elegir-usuario" type="checkbox" data-ids="${esc(ids)}" ${todas ? "checked" : ""}>
+                Seleccionar persona
+              </label>
             </div>
             <dl class="datos">
               ${dato("Teléfono", reciente.telefono)}
@@ -285,6 +305,37 @@
           reproductor.replaceWith(aviso);
         });
       });
+      lista.querySelectorAll(".elegir").forEach((casilla) => {
+        casilla.addEventListener("change", () => {
+          if (casilla.checked) seleccion.add(casilla.value);
+          else seleccion.delete(casilla.value);
+          pintarLista();
+        });
+      });
+      lista.querySelectorAll(".elegir-usuario").forEach((casilla) => {
+        const ids = casilla.dataset.ids.split(",").filter(Boolean);
+        const marcadas = ids.filter((id) => seleccion.has(id)).length;
+        casilla.indeterminate = marcadas > 0 && marcadas < ids.length;
+        casilla.addEventListener("change", () => {
+          casilla.dataset.ids.split(",").filter(Boolean).forEach((id) => {
+            if (casilla.checked) seleccion.add(id);
+            else seleccion.delete(id);
+          });
+          pintarLista();
+        });
+      });
+      actualizarSeleccion();
+    }
+
+    function actualizarSeleccion() {
+      const visiblesAhora = visibles();
+      const marcadas = visiblesAhora.filter((item) => seleccion.has(item.id)).length;
+      botonEliminar.disabled = seleccion.size === 0;
+      botonEliminar.textContent = seleccion.size
+        ? `Eliminar seleccionadas (${seleccion.size})`
+        : "Eliminar seleccionadas";
+      elegirVisibles.checked = visiblesAhora.length > 0 && marcadas === visiblesAhora.length;
+      elegirVisibles.indeterminate = marcadas > 0 && marcadas < visiblesAhora.length;
     }
 
     function pintar() {
@@ -303,13 +354,48 @@
         const respuesta = await fetch("/api/respuestas", { cache: "no-store" });
         if (!respuesta.ok) throw new Error("respuesta");
         respuestas = await respuesta.json();
+        const vigentes = new Set(respuestas.map((item) => item.id));
+        seleccion.forEach((id) => {
+          if (!vigentes.has(id)) seleccion.delete(id);
+        });
         pintar();
       } catch (error) {
         estado.textContent = "No se pudo cargar la información. Revisa que el servicio esté en línea.";
       }
     }
 
+    async function eliminarSeleccion() {
+      const ids = [...seleccion];
+      if (!ids.length) return;
+      const confirma = confirm(ids.length === 1
+        ? "¿Eliminar la encuesta seleccionada? No se puede deshacer."
+        : `¿Eliminar las ${ids.length} encuestas seleccionadas? No se puede deshacer.`);
+      if (!confirma) return;
+      botonEliminar.disabled = true;
+      try {
+        const respuesta = await fetch("/api/respuestas", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+        if (!respuesta.ok) throw new Error("eliminar");
+        seleccion.clear();
+        await cargar();
+      } catch (error) {
+        estado.textContent = "No se pudieron eliminar las encuestas seleccionadas.";
+        actualizarSeleccion();
+      }
+    }
+
     document.querySelector("#actualizar").addEventListener("click", cargar);
+    botonEliminar.addEventListener("click", eliminarSeleccion);
+    elegirVisibles.addEventListener("change", () => {
+      visibles().forEach((item) => {
+        if (elegirVisibles.checked) seleccion.add(item.id);
+        else seleccion.delete(item.id);
+      });
+      pintarLista();
+    });
     buscar.addEventListener("input", pintarLista);
     filtroBarrio.addEventListener("change", pintarLista);
     filtroTipo.addEventListener("change", pintarLista);

@@ -177,6 +177,22 @@ class Almacen:
             return None
         return bytes(fila["audio"])
 
+    def eliminar(self, identificadores):
+        validos = []
+        for identificador in identificadores:
+            if not isinstance(identificador, str) or len(identificador) != 32:
+                continue
+            if not all(letra in "0123456789abcdef" for letra in identificador):
+                continue
+            validos.append(identificador)
+        if not validos:
+            return 0
+        marca = "%s" if self.postgres else "?"
+        consulta = f"DELETE FROM respuestas WHERE id IN ({', '.join(marca for _ in validos)})"
+        with self.sesion() as conexion:
+            cursor = conexion.execute(consulta, tuple(validos))
+            return cursor.rowcount
+
 
 def decodificar_audio(valor):
     if valor in (None, ""):
@@ -256,9 +272,18 @@ def crear_respuesta():
     return jsonify(creada), 201
 
 
+@app.delete("/api/respuestas")
+def borrar_respuestas():
+    datos = request.get_json(silent=True) or {}
+    identificadores = datos.get("ids")
+    if not isinstance(identificadores, list) or not identificadores:
+        return jsonify(error="Selecciona encuestas para eliminar"), 400
+    return jsonify(eliminadas=almacen.eliminar(identificadores))
+
+
 @app.get("/salud")
 def salud():
-    return jsonify(audio=True, version=4)
+    return jsonify(audio=True, version=5)
 
 
 def tipo_audio(contenido):
