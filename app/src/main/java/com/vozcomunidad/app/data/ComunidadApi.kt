@@ -1,5 +1,6 @@
 package com.vozcomunidad.app.data
 
+import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -16,14 +17,19 @@ object ComunidadApi {
         }
     }
 
-    fun publicar(borrador: Respuesta): Respuesta {
+    fun urlAudio(id: String) = "$BASE/api/respuestas/$id/audio"
+
+    fun publicar(borrador: Respuesta, audio: ByteArray?): Respuesta {
         val cuerpo = JSONObject()
             .put("nombre", borrador.nombre)
             .put("telefono", borrador.telefono)
             .put("barrio", borrador.barrio)
             .put("opinion", borrador.opinion)
-            .put("tieneAudio", borrador.tieneAudio)
-            .put("duracionSeg", borrador.duracionSeg)
+            .put("tieneAudio", audio != null && audio.isNotEmpty())
+            .put("duracionSeg", if (audio != null && audio.isNotEmpty()) borrador.duracionSeg else 0)
+        if (audio != null && audio.isNotEmpty()) {
+            cuerpo.put("audio", Base64.encodeToString(audio, Base64.NO_WRAP))
+        }
         return respuestaDe(JSONObject(pedir("POST", "/api/respuestas", cuerpo.toString())))
     }
 

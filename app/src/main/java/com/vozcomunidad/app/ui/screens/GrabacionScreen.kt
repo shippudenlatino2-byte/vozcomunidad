@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import com.vozcomunidad.app.data.Categoria
 import com.vozcomunidad.app.data.EncuestaViewModel
 import com.vozcomunidad.app.data.formatoTiempo
+import com.vozcomunidad.app.ui.accionConMicrofono
 import com.vozcomunidad.app.ui.components.AnillosMic
 import com.vozcomunidad.app.ui.components.Avatar
 import com.vozcomunidad.app.ui.components.MarcaVoz
@@ -90,6 +91,10 @@ fun GrabacionScreen(
 ) {
     var confirmar by remember { mutableStateOf(false) }
     var procesando by remember { mutableStateOf(false) }
+    val grabar = accionConMicrofono(
+        alPermitir = vm::alternarGrabacion,
+        alDenegar = { vm.avisar("Activa el micrófono para guardar la nota de voz") },
+    )
     val categorias = listOf(
         CategoriaVisual(Categoria.SEGURIDAD, "Seguridad", "Vigilancia y luces", Icons.Outlined.LocalPolice, Vz.SecondaryFixed, Vz.OnSecondaryFixed),
         CategoriaVisual(Categoria.SERVICIOS, "Serv. Públicos", "Agua, energía, gas", Icons.Outlined.WaterDrop, Vz.SurfaceContainerHigh, Vz.Primary),
@@ -151,15 +156,14 @@ fun GrabacionScreen(
                 }
             }
             TarjetaCiudadano(vm)
-            TarjetaMicrofono(vm, onDescartar = { confirmar = true })
+            TarjetaMicrofono(vm, onDescartar = { confirmar = true }, onGrabar = grabar)
             TarjetaTranscripcion(vm)
             TarjetaCategorias(vm, categorias)
             TarjetaFoto()
             BotonFinalizar(procesando) {
                 if (!procesando) {
                     procesando = true
-                    vm.grabando = false
-                    vm.audioListo = vm.segundos > 0
+                    vm.finalizarNota()
                 }
             }
             if (procesando) {
@@ -170,7 +174,7 @@ fun GrabacionScreen(
                 }
             }
             Tx(
-                texto = "Al finalizar, el audio se procesará cifrado respetando la ley de protección ciudadana.",
+                texto = "Al finalizar, la nota de voz queda guardada y se envía con la encuesta.",
                 color = Vz.OnSurfaceVariant,
                 size = 11.sp,
                 peso = FontWeight.SemiBold,
@@ -266,6 +270,7 @@ private fun TarjetaCiudadano(vm: EncuestaViewModel) {
 private fun TarjetaMicrofono(
     vm: EncuestaViewModel,
     onDescartar: () -> Unit,
+    onGrabar: () -> Unit,
 ) {
     Column(
         modifier = Modifier.tarjeta(radio = 12.dp).padding(20.dp),
@@ -310,7 +315,7 @@ private fun TarjetaMicrofono(
                     .shadow(12.dp, CircleShape, ambientColor = Vz.SecondaryContainer.copy(alpha = 0.45f), spotColor = Vz.Secondary.copy(alpha = 0.35f))
                     .clip(CircleShape)
                     .background(Vz.SecondaryContainer)
-                    .presionSuave(vm::alternarGrabacion),
+                    .presionSuave(onGrabar),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Filled.Mic, contentDescription = "Micrófono", tint = Vz.OnSecondaryContainer, modifier = Modifier.size(36.dp))
@@ -336,7 +341,7 @@ private fun TarjetaMicrofono(
                 icono = if (vm.grabando) Icons.Outlined.PauseCircle else Icons.Outlined.PlayArrow,
                 tinta = Vz.Primary,
                 modifier = Modifier.weight(1f),
-                onClick = vm::alternarGrabacion,
+                onClick = onGrabar,
             )
         }
     }

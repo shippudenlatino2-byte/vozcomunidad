@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import com.vozcomunidad.app.data.Canal
 import com.vozcomunidad.app.data.EncuestaViewModel
 import com.vozcomunidad.app.data.formatoTiempo
+import com.vozcomunidad.app.ui.accionConMicrofono
 import com.vozcomunidad.app.ui.components.AnillosMic
 import com.vozcomunidad.app.ui.components.BotonPrimario
 import com.vozcomunidad.app.ui.components.CampoLargo
@@ -418,6 +419,14 @@ private fun TarjetaUbicacion(vm: EncuestaViewModel) {
 
 @Composable
 private fun TarjetaOpinion(vm: EncuestaViewModel, onAbrirGrabacion: () -> Unit) {
+    val grabar = accionConMicrofono(
+        alPermitir = vm::alternarGrabacion,
+        alDenegar = { vm.avisar("Activa el micrófono para guardar la nota de voz") },
+    )
+    val repetir = accionConMicrofono(
+        alPermitir = vm::repetirAudio,
+        alDenegar = { vm.avisar("Activa el micrófono para guardar la nota de voz") },
+    )
     Column(
         modifier = Modifier.tarjeta().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -487,7 +496,7 @@ private fun TarjetaOpinion(vm: EncuestaViewModel, onAbrirGrabacion: () -> Unit) 
                         .shadow(10.dp, CircleShape)
                         .clip(CircleShape)
                         .background(Brush.linearGradient(listOf(Vz.Secondary, Vz.SecondaryContainer)))
-                        .presionSuave(vm::alternarGrabacion),
+                        .presionSuave(grabar),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(Icons.Filled.Mic, contentDescription = "Grabar audio", tint = Vz.OnSecondary, modifier = Modifier.size(36.dp))
@@ -534,7 +543,7 @@ private fun TarjetaOpinion(vm: EncuestaViewModel, onAbrirGrabacion: () -> Unit) 
                         )
                     }
                     Row(
-                        modifier = Modifier.presionSuave(vm::repetirAudio),
+                        modifier = Modifier.presionSuave(repetir),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(Icons.Outlined.Replay, contentDescription = null, tint = Vz.Primary, modifier = Modifier.size(14.dp))

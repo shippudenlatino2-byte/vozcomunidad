@@ -1,14 +1,16 @@
 import os
 import sqlite3
 import time
+import base64
 from contextlib import contextmanager
 from datetime import datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 6 * 1024 * 1024
 
 MESES = "ene feb mar abr may jun jul ago sep oct nov dic".split()
 
@@ -76,15 +78,38 @@ class Almacen:
                 estado TEXT NOT NULL,
                 tono TEXT NOT NULL,
                 acento TEXT NOT NULL,
-                urgente {tipo_flag} NOT NULL
+                urgente {tipo_flag} NOT NULL,
+                audio {"BYTEA" if self.postgres else "BLOB"}
             )
         """
         with self.sesion() as conexion:
             conexion.execute(sql)
+            self.asegurar_audio(conexion)
+
+    def asegurar_audio(self, conexion):
+        if "audio" in self.columnas(conexion):
+            return
+        tipo = "BYTEA" if self.postgres else "BLOB"
+        conexion.execute(f"ALTER TABLE respuestas ADD COLUMN audio {tipo}")
+
+    def columnas(self, conexion):
+        if self.postgres:
+            filas = conexion.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'respuestas'"
+            ).fetchall()
+            return {fila["column_name"] for fila in filas}
+        filas = conexion.execute("PRAGMA table_info(respuestas)").fetchall()
+        return {fila["name"] for fila in filas}
 
     def listar(self):
+        consulta = """
+            SELECT id, nombre, telefono, barrio, opinion, momento, creado_en,
+                   tiene_audio, duracion_seg, estado, tono, acento, urgente
+            FROM respuestas
+            ORDER BY creado_en DESC
+        """
         with self.sesion() as conexion:
-            filas = conexion.execute("SELECT * FROM respuestas ORDER BY creado_en DESC").fetchall()
+            filas = conexion.execute(consulta).fetchall()
         return [fila_a_json(fila) for fila in filas]
 
     def guardar(self, datos):
@@ -98,7 +123,8 @@ class Almacen:
         except (TypeError, ValueError):
             duracion = 0
         duracion = max(0, min(180, duracion))
-        tiene_audio = bool(datos.get("tieneAudio")) and duracion > 0
+        contenido = decodificar_audio(datos.get("audio"))
+        tiene_audio = contenido is not None
         registro = {
             "id": uuid4().hex,
             "nombre": nombre,
@@ -113,6 +139,7 @@ class Almacen:
             "tono": "EXITO",
             "acento": "VERDE",
             "urgente": False,
+            "audio": contenido,
         }
         marca = "%s" if self.postgres else "?"
         columnas = list(registro.keys())
@@ -123,6 +150,35 @@ class Almacen:
         with self.sesion() as conexion:
             conexion.execute(sql, tuple(registro.values()))
         return fila_a_json(registro)
+
+    def leer_audio(self, identificador):
+        if not isinstance(identificador, str) or len(identificador) != 32:
+            return None
+        marca = "%s" if self.postgres else "?"
+        with self.sesion() as conexion:
+            fila = conexion.execute(
+                f"SELECT audio FROM respuestas WHERE id = {marca}",
+                (identificador,),
+            ).fetchone()
+        if fila is None or fila["audio"] is None:
+            return None
+        return bytes(fila["audio"])
+
+
+def decodificar_audio(valor):
+    if valor in (None, ""):
+        return None
+    if not isinstance(valor, str):
+        raise ValueError("El audio no es válido")
+    try:
+        contenido = base64.b64decode(valor, validate=True)
+    except Exception as error:
+        raise ValueError("El audio no es válido") from error
+    if len(contenido) > 4 * 1024 * 1024:
+        raise ValueError("El audio supera el tamaño permitido")
+    if len(contenido) < 32:
+        return None
+    return contenido
 
 
 def fila_a_json(fila):
@@ -190,3 +246,11 @@ def crear_respuesta():
     except ValueError as error:
         return jsonify(error=str(error)), 400
     return jsonify(creada), 201
+
+
+@app.get("/api/respuestas/<identificador>/audio")
+def servir_audio(identificador):
+    contenido = almacen.leer_audio(identificador)
+    if not contenido:
+        return jsonify(error="Esta respuesta no tiene audio"), 404
+    return Response(contenido, mimetype="audio/mp4")
