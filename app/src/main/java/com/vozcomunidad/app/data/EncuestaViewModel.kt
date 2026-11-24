@@ -5,8 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class EncuestaViewModel : ViewModel() {
     var nombre by mutableStateOf("")
@@ -26,6 +28,8 @@ class EncuestaViewModel : ViewModel() {
     var filtroModo by mutableStateOf<ModoFiltro?>(null)
     var recientesPrimero by mutableStateOf(true)
     var reproduciendoId by mutableStateOf<String?>(null)
+    var enviando by mutableStateOf(false)
+        private set
     var aviso by mutableStateOf<Aviso?>(null)
         private set
 
@@ -37,6 +41,7 @@ class EncuestaViewModel : ViewModel() {
     )
 
     init {
+        refrescar()
         viewModelScope.launch {
             while (true) {
                 delay(1_000)
@@ -118,13 +123,31 @@ class EncuestaViewModel : ViewModel() {
         avisar("Borrador guardado en este dispositivo")
     }
 
-    fun enviar(): Boolean {
+    fun refrescar() {
+        viewModelScope.launch {
+            val resultado = withContext(Dispatchers.IO) {
+                runCatching { ComunidadApi.listar() }
+            }
+            if (enviando) return@launch
+            resultado
+                .onSuccess { respuestas = it }
+                .onFailure {
+                    if (respuestas.isEmpty()) {
+                        avisar("Sin conexión con la comunidad. Inténtalo de nuevo")
+                    }
+                }
+        }
+    }
+
+    fun enviar(alTerminar: (Boolean) -> Unit) {
+        if (enviando) return
         if (nombre.isBlank() || telefono.isBlank() || opinion.isBlank()) {
             avisar("Completa nombre, teléfono y la opinión")
-            return false
+            alTerminar(false)
+            return
         }
-        val nueva = Respuesta(
-            id = System.currentTimeMillis().toString(),
+        val borrador = Respuesta(
+            id = "",
             nombre = nombre.trim(),
             telefono = telefono.trim(),
             barrio = barrio.ifBlank { localidad },
@@ -134,12 +157,25 @@ class EncuestaViewModel : ViewModel() {
             duracionSeg = if (audioListo) segundos else 0,
             estado = "Enviada a la comunidad",
             tono = Tono.EXITO,
-            acento = Acento.VERDE,
         )
-        respuestas = listOf(nueva) + respuestas
-        reiniciarFormulario()
-        avisar("Encuesta enviada a la comunidad")
-        return true
+        enviando = true
+        viewModelScope.launch {
+            val resultado = withContext(Dispatchers.IO) {
+                runCatching { ComunidadApi.publicar(borrador) }
+            }
+            enviando = false
+            resultado
+                .onSuccess { guardada ->
+                    respuestas = listOf(guardada) + respuestas.filter { it.id != guardada.id }
+                    reiniciarFormulario()
+                    avisar("Encuesta enviada a la comunidad")
+                    alTerminar(true)
+                }
+                .onFailure {
+                    avisar("No se pudo enviar. Revisa la conexión e inténtalo de nuevo")
+                    alTerminar(false)
+                }
+        }
     }
 
     fun respuestasVisibles(): List<Respuesta> {

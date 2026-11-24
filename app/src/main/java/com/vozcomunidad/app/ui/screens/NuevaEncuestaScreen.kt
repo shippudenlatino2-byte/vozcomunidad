@@ -92,8 +92,8 @@ fun NuevaEncuestaScreen(
         TarjetaUbicacion(vm)
         TarjetaOpinion(vm, onAbrirGrabacion)
         BotonPrimario(
-            texto = "Guardar y Enviar Encuesta",
-            onClick = { if (vm.enviar()) onEnviada() },
+            texto = if (vm.enviando) "Enviando a la comunidad…" else "Guardar y Enviar Encuesta",
+            onClick = { vm.enviar { enviada -> if (enviada) onEnviada() } },
             iconoInicio = Icons.AutoMirrored.Outlined.Send,
             iconoFin = Icons.Filled.CheckCircle,
         )

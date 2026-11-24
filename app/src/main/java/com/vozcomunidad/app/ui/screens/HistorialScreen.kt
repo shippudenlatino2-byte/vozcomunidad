@@ -41,6 +41,7 @@ import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,6 +79,10 @@ fun HistorialScreen(
     val audios = vm.respuestas.count { it.tieneAudio }
     val avance = if (total == 0) "0%" else "${(audios * 100 / total)}%"
     val barrios = listOf("Todos") + vm.respuestas.map { it.barrio }.filter { it.isNotBlank() }.distinct()
+
+    LaunchedEffect(Unit) {
+        vm.refrescar()
+    }
 
     Box(Modifier.fillMaxSize()) {
         Column(
