@@ -1,17 +1,27 @@
 import os
+import hmac
+import hashlib
 import sqlite3
 import time
 import base64
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, redirect, request, session
 from pathlib import Path
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 6 * 1024 * 1024
+CLAVE_PANEL = os.environ.get("CLAVE_PANEL", "").strip()
+app.secret_key = os.environ.get("CLAVE_SECRETA") or hashlib.sha256(
+    b"vozcomunidad|" + CLAVE_PANEL.encode("utf-8")
+).hexdigest()
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("RENDER", "").lower() == "true"
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
 
 MESES = "ene feb mar abr may jun jul ago sep oct nov dic".split()
 
@@ -251,8 +261,41 @@ iniciar_almacen()
 
 @app.get("/")
 def inicio():
-    pagina = Path(__file__).with_name("panel.html").read_text(encoding="utf-8")
-    return Response(pagina, mimetype="text/html; charset=utf-8")
+    return pagina("formulario.html")
+
+
+@app.get("/panel")
+def panel():
+    if not es_admin():
+        return redirect("/?entrar=1")
+    return pagina("panel.html")
+
+
+@app.get("/api/sesion")
+def ver_sesion():
+    return jsonify(admin=es_admin())
+
+
+@app.post("/api/sesion")
+def entrar():
+    if not CLAVE_PANEL:
+        return jsonify(error="La clave del panel no está configurada"), 503
+    datos = request.get_json(silent=True) or {}
+    clave = datos.get("clave")
+    if not isinstance(clave, str):
+        clave = ""
+    if not hmac.compare_digest(clave.encode("utf-8"), CLAVE_PANEL.encode("utf-8")):
+        return jsonify(error="Clave incorrecta"), 401
+    session.clear()
+    session["admin"] = True
+    session.permanent = True
+    return jsonify(ok=True)
+
+
+@app.delete("/api/sesion")
+def salir():
+    session.clear()
+    return jsonify(ok=True)
 
 
 @app.get("/api/respuestas")
@@ -274,6 +317,8 @@ def crear_respuesta():
 
 @app.delete("/api/respuestas")
 def borrar_respuestas():
+    if not es_admin():
+        return jsonify(error="Inicia sesión para eliminar"), 401
     datos = request.get_json(silent=True) or {}
     identificadores = datos.get("ids")
     if not isinstance(identificadores, list) or not identificadores:
@@ -283,13 +328,24 @@ def borrar_respuestas():
 
 @app.get("/salud")
 def salud():
-    return jsonify(audio=True, version=5)
+    return jsonify(audio=True, version=6)
 
 
 def tipo_audio(contenido):
     if contenido.startswith(b"RIFF"):
-        return "audio/wav"
-    return "audio/mp4"
+        return "audio/wav", "nota-de-voz.wav"
+    if contenido.startswith(b"\x1aE\xdf\xa3"):
+        return "audio/webm", "nota-de-voz.webm"
+    return "audio/mp4", "nota-de-voz.m4a"
+
+
+def pagina(nombre):
+    texto = Path(__file__).with_name(nombre).read_text(encoding="utf-8")
+    return Response(texto, mimetype="text/html; charset=utf-8", headers={"Cache-Control": "no-store"})
+
+
+def es_admin():
+    return bool(session.get("admin"))
 
 
 @app.get("/api/respuestas/<identificador>/audio")
@@ -297,14 +353,13 @@ def servir_audio(identificador):
     contenido = almacen.leer_audio(identificador)
     if not contenido:
         return jsonify(error="Esta respuesta no tiene audio"), 404
+    mime, nombre = tipo_audio(contenido)
     return Response(
         contenido,
-        mimetype=tipo_audio(contenido),
+        mimetype=mime,
         headers={
             "Content-Length": str(len(contenido)),
             "Accept-Ranges": "bytes",
-            "Content-Disposition": "inline; filename=" + (
-                "nota-de-voz.wav" if contenido.startswith(b"RIFF") else "nota-de-voz.m4a"
-            ),
+            "Content-Disposition": "inline; filename=" + nombre,
         },
     )

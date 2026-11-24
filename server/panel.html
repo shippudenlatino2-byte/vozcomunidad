@@ -47,6 +47,15 @@
     button.secundario { background: white; color: var(--texto); border: 1px solid var(--linea); }
     button.peligro { background: #b42318; }
     button:disabled { opacity: 0.45; cursor: not-allowed; }
+    a.enlace {
+      background: white;
+      color: var(--texto);
+      border: 1px solid var(--linea);
+      border-radius: 10px;
+      padding: 10px 14px;
+      text-decoration: none;
+    }
+    .acciones-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .acciones { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
     .marca-check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
     main { padding: 12px 28px 40px; }
@@ -109,7 +118,11 @@
       <h1>Revisión de encuestas</h1>
       <p class="sub" id="actualizado">Cargando la información que llega desde los celulares.</p>
     </div>
-    <button id="actualizar" type="button">Actualizar</button>
+    <div class="acciones-top">
+      <a class="enlace" href="/">Formulario</a>
+      <button id="salir" type="button" class="secundario">Salir</button>
+      <button id="actualizar" type="button">Actualizar</button>
+    </div>
   </header>
   <main>
     <section class="cifras" id="cifras"></section>
@@ -378,6 +391,10 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ids }),
         });
+        if (respuesta.status === 401) {
+          location.href = "/?entrar=1";
+          return;
+        }
         if (!respuesta.ok) throw new Error("eliminar");
         seleccion.clear();
         await cargar();
@@ -388,6 +405,10 @@
     }
 
     document.querySelector("#actualizar").addEventListener("click", cargar);
+    document.querySelector("#salir").addEventListener("click", async () => {
+      await fetch("/api/sesion", { method: "DELETE" });
+      location.href = "/";
+    });
     botonEliminar.addEventListener("click", eliminarSeleccion);
     elegirVisibles.addEventListener("change", () => {
       visibles().forEach((item) => {

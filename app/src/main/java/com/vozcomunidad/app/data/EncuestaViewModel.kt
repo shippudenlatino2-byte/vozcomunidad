@@ -59,6 +59,12 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
         refrescar()
         viewModelScope.launch {
             while (true) {
+                delay(15_000)
+                if (!enviando) refrescar()
+            }
+        }
+        viewModelScope.launch {
+            while (true) {
                 delay(1_000)
                 if (grabando && segundos < 180) {
                     segundos += 1
@@ -198,7 +204,14 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
             }
             if (enviando) return@launch
             resultado
-                .onSuccess { respuestas = it }
+                .onSuccess { recibidas ->
+                    val vigentes = recibidas.map { it.id }.toSet()
+                    withContext(Dispatchers.IO) { borrarAudiosAusentes(vigentes) }
+                    if (reproduciendoId != null && reproduciendoId !in vigentes) {
+                        detenerReproduccion()
+                    }
+                    respuestas = recibidas
+                }
                 .onFailure {
                     if (respuestas.isEmpty()) {
                         avisar("Sin conexión con la comunidad. Inténtalo de nuevo")
@@ -412,6 +425,15 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
 
     private fun carpetaAudios(): File {
         return File(getApplication<android.app.Application>().filesDir, "audios").apply { mkdirs() }
+    }
+
+    private fun borrarAudiosAusentes(vigentes: Set<String>) {
+        carpetaAudios().listFiles().orEmpty().forEach { archivo ->
+            val id = archivo.name.removeSuffix(".m4a")
+            if (archivo.isFile && id.length == 32 && id !in vigentes) {
+                archivo.delete()
+            }
+        }
     }
 
     private fun detenerReproduccion() {

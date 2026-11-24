@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VozComunidad · Registro de opinión</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --surface: #f8f9ff;
+      --low: #eff4ff;
+      --container: #e6eeff;
+      --high: #dce9ff;
+      --texto: #0d1c2e;
+      --suave: #434655;
+      --linea: #c3c6d7;
+      --primary: #004ac6;
+      --primary-c: #2563eb;
+      --tint: #0053db;
+      --fixed: #dbe1ff;
+      --fixed-dim: #b4c5ff;
+      --secondary: #855300;
+      --secondary-c: #fea619;
+      --on-secondary-c: #684000;
+      --tertiary: #006242;
+      --tertiary-fixed: #6ffbbe;
+      --on-tertiary-fixed: #002113;
+      --error: #ba1a1a;
+      --blanco: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--surface);
+      color: var(--texto);
+      font-family: "Segoe UI", sans-serif;
+    }
+    .pagina { max-width: 480px; margin: 0 auto; padding: 12px 20px 32px; }
+    .pestanas { display: flex; gap: 8px; margin-bottom: 12px; }
+    .pestanas button, .entrar {
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .pestanas button { background: var(--high); color: var(--texto); }
+    .pestanas button.activa { background: var(--primary); color: white; }
+    .entrar { background: white; color: var(--primary); border: 1px solid var(--linea); }
+    .tope { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+    .banner {
+      position: relative;
+      overflow: hidden;
+      border-radius: 16px;
+      padding: 16px;
+      color: white;
+      background: linear-gradient(120deg, var(--primary), var(--primary-c), var(--tint));
+    }
+    .banner h1 { margin: 8px 0; font-size: 24px; }
+    .banner p { margin: 0; color: var(--fixed-dim); font-size: 13px; line-height: 1.4; }
+    .insignia, .voz {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .insignia { background: var(--secondary-c); color: var(--on-secondary-c); }
+    .voz { background: rgba(255,255,255,.12); color: var(--fixed); }
+    .punto { width: 8px; height: 8px; border-radius: 50%; background: #007d55; }
+    .tarjeta {
+      background: white;
+      border-radius: 16px;
+      padding: 16px;
+      margin-top: 16px;
+      box-shadow: 0 1px 0 rgba(13,28,46,.04);
+    }
+    .paso { background: var(--low); }
+    .fila { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .etiqueta { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 650; }
+    .requerido, .porcentaje { color: var(--tertiary); font-size: 11px; font-weight: 700; }
+    .riel { height: 8px; margin-top: 8px; border-radius: 99px; background: var(--high); overflow: hidden; }
+    .relleno { height: 100%; width: 2%; border-radius: 99px; background: linear-gradient(90deg, var(--primary), var(--tertiary)); }
+    input, select, textarea {
+      width: 100%;
+      border: 0;
+      border-radius: 12px;
+      background: var(--low);
+      color: var(--texto);
+      padding: 14px 12px;
+      font: inherit;
+    }
+    textarea { min-height: 110px; resize: vertical; }
+    .prefijo {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      height: 48px;
+      padding: 0 12px;
+      border-radius: 12px;
+      background: var(--high);
+      font-weight: 650;
+    }
+    .telefono { display: flex; gap: 8px; }
+    .valido {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--tertiary-fixed);
+      color: var(--on-tertiary-fixed);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .canales, .temas, .acciones { display: flex; gap: 8px; }
+    .canales button, .tema, .acciones button, .enviar, .mic, .repetir {
+      border: 0;
+      cursor: pointer;
+      font: inherit;
+    }
+    .canales button {
+      flex: 1;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--high);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .canales button.activa { background: var(--tertiary-fixed); color: var(--on-tertiary-fixed); }
+    .ubicacion { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .ayuda { margin: 0; color: var(--suave); font-size: 13px; line-height: 1.4; }
+    .voz-caja {
+      margin-top: 4px;
+      border-radius: 16px;
+      padding: 16px;
+      text-align: center;
+      background: linear-gradient(160deg, var(--high), var(--container), var(--low));
+    }
+    .mic {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      color: white;
+      font-size: 28px;
+      background: linear-gradient(160deg, var(--secondary), var(--secondary-c));
+      box-shadow: 0 8px 18px rgba(133,83,0,.25);
+    }
+    .mic.grabando { outline: 8px solid rgba(254,166,25,.35); }
+    .tiempo { font-family: Consolas, monospace; font-size: 18px; font-weight: 700; }
+    .tiempo span { color: var(--linea); font-size: 13px; font-weight: 600; }
+    .listo {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      background: white;
+      border-radius: 12px;
+      padding: 12px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--tertiary);
+    }
+    .repetir { background: transparent; color: var(--primary); font-weight: 700; font-size: 11px; }
+    .temas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tema {
+      text-align: left;
+      background: var(--low);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .tema.activa { outline: 2px solid var(--primary); background: white; }
+    .tema strong { display: block; font-size: 13px; }
+    .tema span { color: var(--suave); font-size: 11px; }
+    .enviar {
+      width: 100%;
+      margin-top: 16px;
+      height: 52px;
+      border-radius: 14px;
+      background: var(--primary);
+      color: white;
+      font-weight: 700;
+    }
+    .enviar:disabled { opacity: .55; }
+    .acciones button {
+      flex: 1;
+      height: 44px;
+      border-radius: 12px;
+      font-weight: 650;
+    }
+    .borrador { background: var(--high); color: var(--suave); }
+    .limpiar { background: var(--low); color: #737686; }
+    .legal { color: #737686; text-align: center; font-size: 13px; }
+    .aviso { min-height: 1.2em; text-align: center; color: var(--primary); font-weight: 650; }
+    .capa {
+      position: fixed;
+      inset: 0;
+      background: rgba(13,28,46,.45);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .capa[hidden] { display: none; }
+    .dialogo {
+      width: min(480px, 100%);
+      background: white;
+      border-radius: 20px 20px 0 0;
+      padding: 20px;
+    }
+    .dialogo h2 { margin: 0 0 8px; font-size: 20px; }
+    .dialogo p { margin: 0 0 12px; color: var(--suave); }
+    @media (min-width: 700px) {
+      .capa { align-items: center; }
+      .dialogo { border-radius: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="pagina">
+    <div class="tope">
+      <div class="pestanas">
+        <button type="button" class="activa">Formulario</button>
+        <button id="ir-revision" type="button">Revisión</button>
+      </div>
+      <button id="abrir-entrar" class="entrar" type="button">Entrar</button>
+    </div>
+
+    <section class="banner">
+      <div class="fila">
+        <span class="insignia"><i class="punto"></i> Comunidad Activa</span>
+        <span class="voz">Voz Directa</span>
+      </div>
+      <h1>Registro de Opinión</h1>
+      <p>Hola, recopila y amplifica las inquietudes del vecindario con total claridad.</p>
+    </section>
+
+    <section class="tarjeta paso">
+      <div class="fila">
+        <div class="etiqueta"><span class="punto" style="background:var(--primary);color:white;width:20px;height:20px;display:grid;place-items:center;color:white;font-size:11px">1</span> Paso 1 de 2: Datos y Testimonio</div>
+        <span id="porcentaje" class="porcentaje">0%</span>
+      </div>
+      <div class="riel"><div id="relleno" class="relleno"></div></div>
+    </section>
+
+    <section class="tarjeta">
+      <div class="fila">
+        <div class="etiqueta">Nombre completo del ciudadano</div>
+        <span class="requerido">Requerido</span>
+      </div>
+      <input id="nombre" maxlength="80" placeholder="Nombre y apellido" autocomplete="name">
+    </section>
+
+    <section class="tarjeta">
+      <div class="fila">
+        <div class="etiqueta">Teléfono de contacto</div>
+        <span id="valido" class="valido" hidden>Válido</span>
+      </div>
+      <div class="telefono">
+        <div class="prefijo">🇨🇴 +57</div>
+        <input id="telefono" maxlength="30" inputmode="tel" placeholder="300 123 4567" autocomplete="tel">
+      </div>
+      <div class="fila" style="margin-top:8px">
+        <span class="porcentaje" style="color:var(--suave)">Preferencia:</span>
+        <div class="canales">
+          <button id="whatsapp" class="activa" type="button">WhatsApp</button>
+          <button id="llamada" type="button">Llamada</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="tarjeta">
+      <div class="etiqueta">Ubicación vecinal</div>
+      <input id="direccion" maxlength="160" placeholder="Calle / Carrera / Número (Ej. Cra 15 # 45-20)" autocomplete="street-address">
+      <div class="ubicacion">
+        <input id="barrio" maxlength="80" placeholder="Barrio o Sector">
+        <select id="localidad" aria-label="Localidad">
+          <option>Comuna / Localidad Centro</option>
+          <option>Localidad Norte</option>
+          <option>Localidad Sur</option>
+          <option>Localidad Occidente</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="tarjeta">
+      <div class="etiqueta" style="font-size:18px">Opinión o Inquietud</div>
+      <p class="ayuda">Describa la situación del parque, luminarias, seguridad o convivencia.</p>
+      <textarea id="opinion" maxlength="2000" placeholder="Escriba aquí notas clave del testimonio o resumen de la solicitud ciudadana..."></textarea>
+      <div class="voz-caja">
+        <span class="insignia">Voz Ciudadana Auténtica</span>
+        <h2 style="font-size:18px;margin:8px 0 4px">¿Prefiere grabar su inquietud con la voz?</h2>
+        <p class="ayuda">Grabe una nota de audio clara de hasta 3 minutos para mayor fidelidad comunitaria.</p>
+        <button id="mic" class="mic" type="button" aria-label="Grabar audio">🎤</button>
+        <p id="estado-mic" style="font-weight:650">Tocar para grabar</p>
+        <p class="tiempo"><span id="reloj">00:00</span> <span>/ 03:00</span></p>
+        <div class="listo">
+          <span id="nota-estado">Aún no hay nota de voz</span>
+          <button id="repetir" class="repetir" type="button">Repetir</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="tarjeta">
+      <div class="etiqueta">Tema de la inquietud</div>
+      <div class="temas">
+        <button class="tema" type="button" data-categoria="SEGURIDAD"><strong>Seguridad</strong><span>Vigilancia y luces</span></button>
+        <button class="tema" type="button" data-categoria="SERVICIOS"><strong>Serv. Públicos</strong><span>Agua, energía, gas</span></button>
+        <button class="tema" type="button" data-categoria="INFRAESTRUCTURA"><strong>Infraestructura</strong><span>Vías, aceras, puentes</span></button>
+        <button class="tema" type="button" data-categoria="AMBIENTE"><strong>Medio Ambiente</strong><span>Aseo y zonas verdes</span></button>
+      </div>
+    </section>
+
+    <button id="enviar" class="enviar" type="button">Guardar y Enviar Encuesta</button>
+    <div class="acciones" style="margin-top:8px">
+      <button id="borrador" class="borrador" type="button">Guardar borrador</button>
+      <button id="limpiar" class="limpiar" type="button">Limpiar formulario</button>
+    </div>
+    <p id="aviso" class="aviso"></p>
+    <p class="legal">Protección de datos conforme a la veeduría ciudadana municipal.</p>
+  </main>
+
+  <div id="capa" class="capa" hidden>
+    <form id="acceso" class="dialogo">
+      <h2>Entrar al panel</h2>
+      <p>La revisión, la configuración y la eliminación piden esta clave. El formulario queda abierto para quien visite la página.</p>
+      <input id="clave" type="password" autocomplete="current-password" placeholder="Clave de administración" required>
+      <button class="enviar" type="submit">Entrar</button>
+      <button id="cerrar-entrar" class="limpiar" type="button" style="width:100%;margin-top:8px">Volver al formulario</button>
+      <p id="error-clave" class="aviso"></p>
+    </form>
+  </div>
+
+  <script>
+    const campos = ["nombre", "telefono", "direccion", "barrio", "opinion"].reduce((mapa, id) => {
+      mapa[id] = document.querySelector("#" + id);
+      return mapa;
+    }, {});
+    const aviso = document.querySelector("#aviso");
+    const capa = document.querySelector("#capa");
+    const errorClave = document.querySelector("#error-clave");
+    let canal = "WHATSAPP";
+    let categoria = "";
+    let segundos = 0;
+    let grabando = false;
+    let audioListo = false;
+    let recorder = null;
+    let flujo = null;
+    let trozos = [];
+    let audioBlob = null;
+    let reloj = null;
+    let enviando = false;
+
+    function decir(texto) { aviso.textContent = texto; }
+
+    function avance() {
+      const completos = [campos.nombre, campos.telefono, campos.barrio, campos.opinion]
+        .filter((campo) => campo.value.trim()).length;
+      const porcentaje = Math.round((completos / 4) * 100);
+      document.querySelector("#porcentaje").textContent = porcentaje + "%";
+      document.querySelector("#relleno").style.width = Math.max(porcentaje, 2) + "%";
+      const digitos = campos.telefono.value.replace(/\D/g, "").length;
+      document.querySelector("#valido").hidden = digitos < 7;
+    }
+
+    function formato(total) {
+      return String(Math.floor(total / 60)).padStart(2, "0") + ":" + String(total % 60).padStart(2, "0");
+    }
+
+    function pintarMic() {
+      document.querySelector("#reloj").textContent = formato(segundos);
+      document.querySelector("#mic").classList.toggle("grabando", grabando);
+      document.querySelector("#estado-mic").textContent = grabando
+        ? "Tocar para Pausar Grabación"
+        : segundos > 0 ? "Tocar para Reanudar Audio" : "Tocar para grabar";
+      document.querySelector("#nota-estado").textContent = audioListo && segundos > 0
+        ? "Nota de voz lista para adjuntar"
+        : "Aún no hay nota de voz";
+    }
+
+    function elegirCanal(nombre) {
+      canal = nombre;
+      document.querySelector("#whatsapp").classList.toggle("activa", nombre === "WHATSAPP");
+      document.querySelector("#llamada").classList.toggle("activa", nombre === "LLAMADA");
+    }
+
+    document.querySelector("#whatsapp").addEventListener("click", () => elegirCanal("WHATSAPP"));
+    document.querySelector("#llamada").addEventListener("click", () => elegirCanal("LLAMADA"));
+    document.querySelectorAll(".tema").forEach((boton) => {
+      boton.addEventListener("click", () => {
+        categoria = boton.dataset.categoria;
+        document.querySelectorAll(".tema").forEach((otro) => otro.classList.toggle("activa", otro === boton));
+      });
+    });
+    Object.values(campos).forEach((campo) => campo.addEventListener("input", avance));
+
+    function pararReloj() {
+      clearInterval(reloj);
+      reloj = null;
+    }
+
+    function iniciarReloj() {
+      pararReloj();
+      reloj = setInterval(() => {
+        if (!grabando || segundos >= 180) return;
+        segundos += 1;
+        audioListo = true;
+        if (segundos === 180) detenerGrabacion();
+        pintarMic();
+      }, 1000);
+    }
+
+    function soltarMicrofono() {
+      if (flujo) flujo.getTracks().forEach((pista) => pista.stop());
+      flujo = null;
+    }
+
+    function detenerGrabacion() {
+      grabando = false;
+      pararReloj();
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+      else pintarMic();
+    }
+
+    async function comenzarGrabacion() {
+      flujo = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferido = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"]
+        .find((tipo) => window.MediaRecorder && MediaRecorder.isTypeSupported(tipo));
+      recorder = preferido ? new MediaRecorder(flujo, { mimeType: preferido }) : new MediaRecorder(flujo);
+      trozos = [];
+      audioBlob = null;
+      segundos = 0;
+      audioListo = false;
+      recorder.ondataavailable = (evento) => { if (evento.data.size) trozos.push(evento.data); };
+      recorder.onstop = () => {
+        audioBlob = new Blob(trozos, { type: recorder.mimeType || "audio/webm" });
+        audioListo = audioBlob.size > 32;
+        grabando = false;
+        soltarMicrofono();
+        recorder = null;
+        pintarMic();
+      };
+      recorder.start();
+      grabando = true;
+      iniciarReloj();
+      pintarMic();
+    }
+
+    async function alternarGrabacion() {
+      try {
+        if (grabando) {
+          if (recorder && recorder.state === "recording" && recorder.pause) {
+            recorder.pause();
+            grabando = false;
+            audioListo = segundos > 0;
+            pararReloj();
+            pintarMic();
+            return;
+          }
+          detenerGrabacion();
+          return;
+        }
+        if (recorder && recorder.state === "paused") {
+          recorder.resume();
+          grabando = true;
+          iniciarReloj();
+          pintarMic();
+          return;
+        }
+        await comenzarGrabacion();
+      } catch (error) {
+        decir("Activa el micrófono para guardar la nota de voz");
+      }
+    }
+
+    document.querySelector("#mic").addEventListener("click", alternarGrabacion);
+    document.querySelector("#repetir").addEventListener("click", async () => {
+      detenerGrabacion();
+      segundos = 0;
+      audioBlob = null;
+      audioListo = false;
+      pintarMic();
+      await alternarGrabacion();
+    });
+
+    function leerFormulario() {
+      return {
+        nombre: campos.nombre.value,
+        telefono: campos.telefono.value,
+        direccion: campos.direccion.value,
+        barrio: campos.barrio.value,
+        localidad: document.querySelector("#localidad").value,
+        opinion: campos.opinion.value,
+        canal,
+        categoria,
+      };
+    }
+
+    function limpiar() {
+      detenerGrabacion();
+      Object.values(campos).forEach((campo) => { campo.value = ""; });
+      document.querySelector("#localidad").selectedIndex = 0;
+      elegirCanal("WHATSAPP");
+      categoria = "";
+      document.querySelectorAll(".tema").forEach((boton) => boton.classList.remove("activa"));
+      segundos = 0;
+      audioBlob = null;
+      audioListo = false;
+      pintarMic();
+      avance();
+    }
+
+    document.querySelector("#limpiar").addEventListener("click", () => {
+      localStorage.removeItem("voz-borrador");
+      limpiar();
+      decir("Formulario limpio");
+    });
+
+    document.querySelector("#borrador").addEventListener("click", () => {
+      const datos = leerFormulario();
+      if (!datos.nombre.trim() && !datos.opinion.trim() && !audioListo) {
+        decir("Escribe un nombre o una opinión para el borrador");
+        return;
+      }
+      if (grabando && recorder && recorder.pause) {
+        recorder.pause();
+        grabando = false;
+        pararReloj();
+        pintarMic();
+      }
+      localStorage.setItem("voz-borrador", JSON.stringify(datos));
+      decir("Borrador guardado en este dispositivo");
+    });
+
+    function restaurarBorrador() {
+      const guardado = localStorage.getItem("voz-borrador");
+      if (!guardado) return;
+      try {
+        const datos = JSON.parse(guardado);
+        Object.entries(campos).forEach(([id, campo]) => { if (datos[id]) campo.value = datos[id]; });
+        if (datos.localidad) document.querySelector("#localidad").value = datos.localidad;
+        if (datos.canal) elegirCanal(datos.canal);
+        if (datos.categoria) {
+          categoria = datos.categoria;
+          document.querySelectorAll(".tema").forEach((boton) => {
+            boton.classList.toggle("activa", boton.dataset.categoria === categoria);
+          });
+        }
+        avance();
+      } catch (error) {
+        localStorage.removeItem("voz-borrador");
+      }
+    }
+
+    function blobABase64(blob) {
+      return new Promise((resolver, rechazar) => {
+        const lector = new FileReader();
+        lector.onload = () => resolver(String(lector.result).split(",")[1] || "");
+        lector.onerror = () => rechazar(new Error("audio"));
+        lector.readAsDataURL(blob);
+      });
+    }
+
+    async function cerrarNota() {
+      if (!recorder || recorder.state === "inactive") return audioBlob;
+      const actual = recorder;
+      await new Promise((resolver) => {
+        const alDetener = actual.onstop;
+        actual.onstop = (evento) => {
+          if (alDetener) alDetener(evento);
+          resolver();
+        };
+        grabando = false;
+        pararReloj();
+        actual.stop();
+      });
+      return audioBlob;
+    }
+
+    document.querySelector("#enviar").addEventListener("click", async () => {
+      if (enviando) return;
+      const datos = leerFormulario();
+      if (!datos.nombre.trim() || !datos.telefono.trim() || !datos.opinion.trim()) {
+        decir("Completa nombre, teléfono y la opinión");
+        return;
+      }
+      enviando = true;
+      document.querySelector("#enviar").disabled = true;
+      decir("Guardando en la comunidad…");
+      try {
+        const nota = await cerrarNota();
+        const cuerpo = {
+          nombre: datos.nombre.trim(),
+          telefono: datos.telefono.trim(),
+          barrio: (datos.barrio.trim() || datos.localidad.trim()),
+          direccion: datos.direccion.trim(),
+          localidad: datos.localidad.trim(),
+          canal: datos.canal,
+          categoria: datos.categoria,
+          opinion: datos.opinion.trim(),
+          duracionSeg: nota && nota.size > 32 ? Math.max(1, segundos) : 0,
+        };
+        if (nota && nota.size > 32) cuerpo.audio = await blobABase64(nota);
+        const respuesta = await fetch("/api/respuestas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(cuerpo),
+        });
+        if (!respuesta.ok) throw new Error("guardar");
+        localStorage.removeItem("voz-borrador");
+        limpiar();
+        decir(cuerpo.audio ? "Encuesta enviada con la nota de voz" : "Encuesta enviada a la comunidad");
+      } catch (error) {
+        decir("No se pudo guardar. Espera un momento y vuelve a intentar.");
+      } finally {
+        enviando = false;
+        document.querySelector("#enviar").disabled = false;
+      }
+    });
+
+    function mostrarAcceso() {
+      errorClave.textContent = "";
+      capa.hidden = false;
+      document.querySelector("#clave").focus();
+    }
+
+    document.querySelector("#abrir-entrar").addEventListener("click", mostrarAcceso);
+    document.querySelector("#cerrar-entrar").addEventListener("click", () => { capa.hidden = true; });
+    document.querySelector("#ir-revision").addEventListener("click", async () => {
+      const sesion = await fetch("/api/sesion").then((respuesta) => respuesta.json()).catch(() => ({ admin: false }));
+      if (sesion.admin) location.href = "/panel";
+      else mostrarAcceso();
+    });
+    document.querySelector("#acceso").addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      errorClave.textContent = "";
+      const respuesta = await fetch("/api/sesion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clave: document.querySelector("#clave").value }),
+      });
+      if (!respuesta.ok) {
+        const datos = await respuesta.json().catch(() => ({}));
+        errorClave.textContent = datos.error || "Clave incorrecta";
+        return;
+      }
+      location.href = "/panel";
+    });
+
+    restaurarBorrador();
+    avance();
+    pintarMic();
+    if (new URLSearchParams(location.search).get("entrar") === "1") mostrarAcceso();
+  </script>
+</body>
+</html>
