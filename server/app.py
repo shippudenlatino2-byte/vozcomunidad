@@ -248,6 +248,11 @@ def crear_respuesta():
     return jsonify(creada), 201
 
 
+@app.get("/salud")
+def salud():
+    return jsonify(audio=True, version=2)
+
+
 @app.get("/api/respuestas/<identificador>/audio")
 def servir_audio(identificador):
     contenido = almacen.leer_audio(identificador)

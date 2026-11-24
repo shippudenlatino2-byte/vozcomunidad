@@ -120,32 +120,41 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
         detenerReproduccion()
         val generacion = generacionAudio
         reproduciendoId = id
-        val url = ComunidadApi.urlAudio(id)
         viewModelScope.launch {
-            val player = MediaPlayer()
-            val listo = withContext(Dispatchers.IO) {
-                runCatching {
-                    player.setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                            .build(),
-                    )
-                    player.setDataSource(url)
-                    player.prepare()
-                }
-            }
-            if (generacion != generacionAudio) {
-                runCatching { player.release() }
+            val archivo = withContext(Dispatchers.IO) { obtenerAudio(id) }
+            if (generacion != generacionAudio) return@launch
+            if (archivo == null) {
+                reproduciendoId = null
+                avisar("Este audio no quedó guardado. Grábalo otra vez y envía la encuesta")
                 return@launch
             }
-            listo.onSuccess {
-                reproductor = player
-                player.setOnCompletionListener { detenerReproduccion() }
-                player.start()
-            }.onFailure {
-                runCatching { player.release() }
+            val player = MediaPlayer()
+            reproductor = player
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build(),
+            )
+            player.setDataSource(archivo.absolutePath)
+            player.setOnCompletionListener {
+                if (generacion == generacionAudio) detenerReproduccion()
+            }
+            player.setOnErrorListener { _, _, _ ->
+                avisar("No se pudo reproducir el audio")
+                detenerReproduccion()
+                true
+            }
+            player.setOnPreparedListener { preparado ->
+                if (generacion != generacionAudio) {
+                    runCatching { preparado.release() }
+                } else {
+                    preparado.start()
+                }
+            }
+            runCatching { player.prepareAsync() }.onFailure {
                 reproduciendoId = null
+                runCatching { player.release() }
                 avisar("No se pudo reproducir el audio")
             }
         }
@@ -222,7 +231,11 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
         enviando = true
         viewModelScope.launch {
             val resultado = withContext(Dispatchers.IO) {
-                runCatching { ComunidadApi.publicar(borrador, archivo?.readBytes()) }
+                runCatching {
+                    val guardada = ComunidadApi.publicar(borrador, archivo?.readBytes())
+                    if (archivo != null) guardarCopia(guardada.id, archivo)
+                    guardada
+                }
             }
             enviando = false
             resultado
@@ -346,6 +359,24 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
             @Suppress("DEPRECATION")
             MediaRecorder()
         }
+    }
+
+    private fun guardarCopia(id: String, origen: File) {
+        val destino = File(carpetaAudios(), "$id.m4a")
+        runCatching { origen.copyTo(destino, overwrite = true) }
+    }
+
+    private fun obtenerAudio(id: String): File? {
+        val local = File(carpetaAudios(), "$id.m4a")
+        if (local.exists() && local.length() > 32) return local
+        val descargado = runCatching { ComunidadApi.descargarAudio(id, local) }.getOrDefault(false)
+        if (descargado && local.exists() && local.length() > 32) return local
+        if (local.exists()) local.delete()
+        return null
+    }
+
+    private fun carpetaAudios(): File {
+        return File(getApplication<android.app.Application>().filesDir, "audios").apply { mkdirs() }
     }
 
     private fun detenerReproduccion() {

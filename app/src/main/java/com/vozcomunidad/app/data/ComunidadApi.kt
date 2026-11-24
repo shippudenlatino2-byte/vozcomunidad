@@ -19,6 +19,25 @@ object ComunidadApi {
 
     fun urlAudio(id: String) = "$BASE/api/respuestas/$id/audio"
 
+    fun descargarAudio(id: String, destino: java.io.File): Boolean {
+        val conexion = (URL(urlAudio(id)).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 20_000
+            readTimeout = 70_000
+            setRequestProperty("User-Agent", "VozComunidad/1.0")
+        }
+        return try {
+            if (conexion.responseCode !in 200..299) return false
+            destino.parentFile?.mkdirs()
+            conexion.inputStream.use { entrada ->
+                destino.outputStream().use { salida -> entrada.copyTo(salida) }
+            }
+            destino.length() > 32
+        } finally {
+            conexion.disconnect()
+        }
+    }
+
     fun publicar(borrador: Respuesta, audio: ByteArray?): Respuesta {
         val cuerpo = JSONObject()
             .put("nombre", borrador.nombre)
