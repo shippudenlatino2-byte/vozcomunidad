@@ -8,6 +8,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from flask import Flask, Response, jsonify, request
+from pathlib import Path
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 6 * 1024 * 1024
@@ -218,17 +219,8 @@ iniciar_almacen()
 
 @app.get("/")
 def inicio():
-    total = len(almacen.listar())
-    return (
-        "<!doctype html><html lang='es'><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
-        "<title>VozComunidad</title>"
-        "<body style='font-family:sans-serif;margin:40px;line-height:1.5'>"
-        "<h1>VozComunidad está en línea</h1>"
-        f"<p>Respuestas guardadas: {total}.</p>"
-        "<p>La app de Android se conecta a este servicio para compartir las encuestas entre celulares.</p>"
-        "</body></html>"
-    )
+    pagina = Path(__file__).with_name("panel.html").read_text(encoding="utf-8")
+    return Response(pagina, mimetype="text/html; charset=utf-8")
 
 
 @app.get("/api/respuestas")
@@ -250,7 +242,7 @@ def crear_respuesta():
 
 @app.get("/salud")
 def salud():
-    return jsonify(audio=True, version=2)
+    return jsonify(audio=True, version=3)
 
 
 @app.get("/api/respuestas/<identificador>/audio")

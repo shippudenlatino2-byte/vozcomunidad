@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VozComunidad · Revisión</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --fondo: #f4f7fb;
+      --tarjeta: #ffffff;
+      --texto: #122033;
+      --suave: #5c6b7e;
+      --linea: #d7e0ea;
+      --azul: #0b57d0;
+      --azul-suave: #e7f0ff;
+      --verde: #0d7a52;
+      --verde-suave: #e5f6ee;
+      --ambar: #8a5a00;
+      --ambar-suave: #fff4df;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background: var(--fondo);
+      color: var(--texto);
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      padding: 24px 28px 8px;
+    }
+    .marca { margin: 0; color: var(--azul); font-weight: 700; letter-spacing: 0.04em; font-size: 13px; }
+    h1 { margin: 4px 0 0; font-size: 28px; }
+    .sub { margin: 6px 0 0; color: var(--suave); }
+    button, select, input {
+      font: inherit;
+      color: var(--texto);
+    }
+    button {
+      background: var(--azul);
+      color: white;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+    }
+    main { padding: 12px 28px 40px; }
+    .cifras, .filtros { display: grid; gap: 12px; }
+    .cifras { grid-template-columns: repeat(4, 1fr); margin-bottom: 16px; }
+    .tarjeta {
+      background: var(--tarjeta);
+      border: 1px solid var(--linea);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .etiqueta { margin: 0; color: var(--suave); font-size: 13px; }
+    .numero { margin: 8px 0 0; font-size: 32px; font-weight: 750; }
+    .paneles { display: grid; grid-template-columns: 1.4fr 0.8fr; gap: 12px; margin-bottom: 16px; }
+    h2 { margin: 0 0 12px; font-size: 16px; }
+    .barra { display: grid; grid-template-columns: minmax(90px, 160px) 1fr auto; gap: 8px; align-items: center; margin: 8px 0; }
+    .riel { height: 10px; background: var(--azul-suave); border-radius: 99px; overflow: hidden; }
+    .relleno { height: 100%; background: var(--azul); border-radius: 99px; }
+    .filtros { grid-template-columns: 1.6fr 0.7fr 0.7fr; margin-bottom: 16px; }
+    input, select {
+      width: 100%;
+      background: white;
+      border: 1px solid var(--linea);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .item { margin-bottom: 12px; }
+    .tope { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    .nombre { margin: 0; font-size: 18px; }
+    .meta { margin: 4px 0 0; color: var(--suave); font-size: 14px; }
+    .pastilla {
+      display: inline-block;
+      border-radius: 99px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      background: var(--verde-suave);
+      color: var(--verde);
+    }
+    .pastilla.texto { background: var(--ambar-suave); color: var(--ambar); }
+    .opinion { margin: 12px 0; line-height: 1.45; white-space: pre-wrap; }
+    audio { width: 100%; }
+    .aviso { color: var(--suave); }
+    .vacio, #estado { color: var(--suave); }
+    @media (max-width: 800px) {
+      header, main { padding-left: 16px; padding-right: 16px; }
+      .cifras, .paneles, .filtros { grid-template-columns: 1fr; }
+      header { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <p class="marca">VOZCOMUNIDAD</p>
+      <h1>Revisión de encuestas</h1>
+      <p class="sub" id="actualizado">Cargando la información que llega desde los celulares.</p>
+    </div>
+    <button id="actualizar" type="button">Actualizar</button>
+  </header>
+  <main>
+    <section class="cifras" id="cifras"></section>
+    <section class="paneles">
+      <article class="tarjeta">
+        <h2>Por barrio</h2>
+        <div id="barrios"></div>
+      </article>
+      <article class="tarjeta">
+        <h2>Qué revisar</h2>
+        <p id="hallazgo" class="aviso">Todavía no hay encuestas.</p>
+      </article>
+    </section>
+    <section class="filtros">
+      <input id="buscar" type="search" placeholder="Buscar por nombre, teléfono, barrio u opinión">
+      <select id="filtro-barrio" aria-label="Filtrar por barrio"><option value="">Todos los barrios</option></select>
+      <select id="filtro-tipo" aria-label="Filtrar por tipo">
+        <option value="">Texto y audio</option>
+        <option value="audio">Solo con audio</option>
+        <option value="texto">Solo texto</option>
+      </select>
+    </section>
+    <section id="lista"></section>
+    <p id="estado"></p>
+  </main>
+  <script>
+    const cifras = document.querySelector("#cifras");
+    const barrios = document.querySelector("#barrios");
+    const hallazgo = document.querySelector("#hallazgo");
+    const lista = document.querySelector("#lista");
+    const estado = document.querySelector("#estado");
+    const actualizado = document.querySelector("#actualizado");
+    const buscar = document.querySelector("#buscar");
+    const filtroBarrio = document.querySelector("#filtro-barrio");
+    const filtroTipo = document.querySelector("#filtro-tipo");
+    let respuestas = [];
+
+    function esc(valor) {
+      return String(valor ?? "").replace(/[&<>"']/g, (letra) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[letra]));
+    }
+
+    function visibles() {
+      const texto = buscar.value.trim().toLowerCase();
+      const barrio = filtroBarrio.value;
+      const tipo = filtroTipo.value;
+      return respuestas.filter((item) => {
+        const coincideTexto = !texto || [item.nombre, item.telefono, item.barrio, item.opinion]
+          .join(" ").toLowerCase().includes(texto);
+        const coincideBarrio = !barrio || item.barrio === barrio;
+        const coincideTipo = !tipo || (tipo === "audio" ? item.tieneAudio : !item.tieneAudio);
+        return coincideTexto && coincideBarrio && coincideTipo;
+      });
+    }
+
+    function pintarCifras() {
+      const total = respuestas.length;
+      const audios = respuestas.filter((item) => item.tieneAudio).length;
+      const zonas = new Set(respuestas.map((item) => item.barrio).filter(Boolean)).size;
+      const datos = [
+        ["Encuestas", total],
+        ["Con audio", audios],
+        ["Solo texto", total - audios],
+        ["Barrios", zonas],
+      ];
+      cifras.innerHTML = datos.map(([nombre, valor]) => `
+        <article class="tarjeta">
+          <p class="etiqueta">${nombre}</p>
+          <p class="numero">${valor}</p>
+        </article>
+      `).join("");
+      lista.querySelectorAll("audio").forEach((reproductor) => {
+        reproductor.addEventListener("error", () => {
+          const aviso = document.createElement("p");
+          aviso.className = "aviso";
+          aviso.textContent = "La encuesta marca audio, pero el archivo no está disponible.";
+          reproductor.replaceWith(aviso);
+        });
+      });
+    }
+
+    function pintarBarrios() {
+      const grupos = new Map();
+      respuestas.forEach((item) => {
+        const nombre = item.barrio || "Sin barrio";
+        grupos.set(nombre, (grupos.get(nombre) || 0) + 1);
+      });
+      const orden = [...grupos.entries()].sort((a, b) => b[1] - a[1]);
+      const maximo = orden[0]?.[1] || 1;
+      if (!orden.length) {
+        barrios.innerHTML = `<p class="vacio">Cuando llegue la primera encuesta, aquí se verá el barrio.</p>`;
+        hallazgo.textContent = "Todavía no hay encuestas para revisar.";
+        return;
+      }
+      barrios.innerHTML = orden.map(([nombre, cantidad]) => `
+        <div class="barra">
+          <span>${esc(nombre)}</span>
+          <div class="riel"><div class="relleno" style="width:${Math.round(cantidad / maximo * 100)}%"></div></div>
+          <strong>${cantidad}</strong>
+        </div>
+      `).join("");
+      const lider = orden[0];
+      const audios = respuestas.filter((item) => item.tieneAudio).length;
+      const fraseAudio = audios === 1 ? "1 incluye nota de voz" : `${audios} incluyen nota de voz`;
+      hallazgo.textContent = `${lider[0]} tiene ${lider[1]} de ${respuestas.length} encuestas. ${fraseAudio}.`;
+    }
+
+    function pintarFiltroBarrio() {
+      const elegido = filtroBarrio.value;
+      const nombres = [...new Set(respuestas.map((item) => item.barrio).filter(Boolean))].sort();
+      filtroBarrio.innerHTML = `<option value="">Todos los barrios</option>` + nombres
+        .map((nombre) => `<option value="${esc(nombre)}">${esc(nombre)}</option>`).join("");
+      filtroBarrio.value = nombres.includes(elegido) ? elegido : "";
+    }
+
+    function pintarLista() {
+      const items = visibles();
+      if (!items.length) {
+        lista.innerHTML = `<p class="vacio">No hay encuestas con ese filtro.</p>`;
+        return;
+      }
+      lista.innerHTML = items.map((item) => {
+        const audio = item.tieneAudio
+          ? `<audio controls preload="none" aria-label="Nota de voz de ${esc(item.nombre)}" src="/api/respuestas/${esc(item.id)}/audio"></audio>`
+          : `<p class="aviso">Sin nota de voz.</p>`;
+        return `
+          <article class="tarjeta item">
+            <div class="tope">
+              <div>
+                <h2 class="nombre">${esc(item.nombre)}</h2>
+                <p class="meta">${esc(item.telefono)} · ${esc(item.barrio)} · ${esc(item.momento)}</p>
+              </div>
+              <span class="pastilla ${item.tieneAudio ? "" : "texto"}">${item.tieneAudio ? "Audio " + esc(item.duracionSeg) + " s" : "Texto"}</span>
+            </div>
+            <p class="opinion">${esc(item.opinion)}</p>
+            ${audio}
+          </article>
+        `;
+      }).join("");
+    }
+
+    function pintar() {
+      pintarCifras();
+      pintarBarrios();
+      pintarFiltroBarrio();
+      pintarLista();
+      const hora = new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+      actualizado.textContent = `Información recibida desde los celulares. Actualizado a las ${hora}`;
+      estado.textContent = "";
+    }
+
+    async function cargar() {
+      estado.textContent = "Buscando encuestas…";
+      try {
+        const respuesta = await fetch("/api/respuestas", { cache: "no-store" });
+        if (!respuesta.ok) throw new Error("respuesta");
+        respuestas = await respuesta.json();
+        pintar();
+      } catch (error) {
+        estado.textContent = "No se pudo cargar la información. Revisa que el servicio esté en línea.";
+      }
+    }
+
+    document.querySelector("#actualizar").addEventListener("click", cargar);
+    buscar.addEventListener("input", pintarLista);
+    filtroBarrio.addEventListener("change", pintarLista);
+    filtroTipo.addEventListener("change", pintarLista);
+    cargar();
+    setInterval(cargar, 20000);
+  </script>
+</body>
+</html>
