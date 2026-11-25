@@ -337,7 +337,7 @@
 
     <section class="tarjeta">
       <div class="etiqueta" style="font-size:18px">Opinión o Inquietud</div>
-      <p class="ayuda">Describa la situación del parque, luminarias, seguridad o convivencia.</p>
+      <p class="ayuda">Escribe la inquietud o grábalo con la voz. Con uno de los dos se puede guardar.</p>
       <textarea id="opinion" maxlength="2000" placeholder="Escriba aquí notas clave del testimonio o resumen de la solicitud ciudadana..."></textarea>
       <div class="voz-caja">
         <span class="insignia">Voz Ciudadana Auténtica</span>
@@ -406,9 +406,13 @@
 
     function decir(texto) { aviso.textContent = texto; }
 
+    function tieneTestimonio() {
+      return Boolean(campos.opinion.value.trim() || audioListo || segundos > 0);
+    }
+
     function avance() {
-      const completos = [campos.nombre, campos.telefono, campos.barrio, campos.opinion]
-        .filter((campo) => campo.value.trim()).length;
+      const completos = [campos.nombre.value.trim(), campos.telefono.value.trim(), campos.barrio.value.trim(), tieneTestimonio()]
+        .filter(Boolean).length;
       const porcentaje = Math.round((completos / 4) * 100);
       document.querySelector("#porcentaje").textContent = porcentaje + "%";
       document.querySelector("#relleno").style.width = Math.max(porcentaje, 2) + "%";
@@ -429,6 +433,7 @@
       document.querySelector("#nota-estado").textContent = audioListo && segundos > 0
         ? "Nota de voz lista para adjuntar"
         : "Aún no hay nota de voz";
+      avance();
     }
 
     function elegirCanal(nombre) {
@@ -730,8 +735,8 @@
     document.querySelector("#enviar").addEventListener("click", async () => {
       if (enviando) return;
       const datos = leerFormulario();
-      if (!datos.nombre.trim() || !datos.telefono.trim() || !datos.opinion.trim()) {
-        decir("Completa nombre, teléfono y la opinión");
+      if (!datos.nombre.trim() || !datos.telefono.trim() || !tieneTestimonio()) {
+        decir("Completa nombre y teléfono, y escribe la opinión o graba la nota de voz");
         return;
       }
       const otros = await concejalesDistintos(datos);

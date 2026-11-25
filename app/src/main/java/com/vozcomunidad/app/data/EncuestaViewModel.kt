@@ -254,8 +254,9 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
 
     fun enviar(forzar: Boolean = false, alTerminar: (Boolean) -> Unit) {
         if (enviando) return
-        if (nombre.isBlank() || telefono.isBlank() || opinion.isBlank()) {
-            avisar("Completa nombre, teléfono y la opinión")
+        val tieneVoz = grabando || audioListo || segundos > 0 || notaGuardada()
+        if (nombre.isBlank() || telefono.isBlank() || (opinion.isBlank() && !tieneVoz)) {
+            avisar("Completa nombre y teléfono, y escribe la opinión o graba la nota de voz")
             alTerminar(false)
             return
         }

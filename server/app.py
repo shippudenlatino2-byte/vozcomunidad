@@ -169,8 +169,6 @@ class Almacen:
         nombre = campo(datos.get("nombre"), 80)
         telefono = campo(datos.get("telefono"), 30)
         opinion = campo(datos.get("opinion"), 2000, multilinea=True)
-        if not nombre or not telefono or not opinion:
-            raise ValueError("Completa nombre, teléfono y la opinión")
         try:
             duracion = int(datos.get("duracionSeg") or 0)
         except (TypeError, ValueError):
@@ -178,6 +176,8 @@ class Almacen:
         duracion = max(0, min(180, duracion))
         contenido = decodificar_audio(datos.get("audio"))
         tiene_audio = contenido is not None
+        if not nombre or not telefono or (not opinion and not tiene_audio):
+            raise ValueError("Completa nombre y teléfono, y escribe la opinión o graba la nota de voz")
         registro = {
             "id": uuid4().hex,
             "nombre": nombre,
@@ -686,7 +686,7 @@ def crear_lider():
 
 @app.get("/salud")
 def salud():
-    return jsonify(audio=True, version=11)
+    return jsonify(audio=True, version=12)
 
 
 def tipo_audio(contenido):

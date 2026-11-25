@@ -220,7 +220,8 @@ private fun BannerRegistro() {
 
 @Composable
 private fun PasoUno(vm: EncuestaViewModel) {
-    val completos = listOf(vm.nombre, vm.telefono, vm.barrio, vm.opinion).count { it.isNotBlank() }
+    val testimonio = vm.opinion.isNotBlank() || vm.audioListo || vm.grabando || vm.segundos > 0
+    val completos = listOf(vm.nombre.isNotBlank(), vm.telefono.isNotBlank(), vm.barrio.isNotBlank(), testimonio).count { it }
     val avance = completos / 4f
     Column(
         modifier = Modifier
@@ -496,7 +497,7 @@ private fun TarjetaOpinion(vm: EncuestaViewModel, onAbrirGrabacion: () -> Unit) 
             }
         }
         Tx(
-            texto = "Describa la situación del parque, luminarias, seguridad o convivencia.",
+            texto = "Escribe la inquietud o grábalo con la voz. Con uno de los dos se puede guardar.",
             color = Vz.OnSurfaceVariant,
             size = 13.sp,
             alto = 18.sp,
