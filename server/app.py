@@ -102,6 +102,20 @@ class Almacen:
             self.asegurar_audio(conexion)
             for nombre in ("canal", "direccion", "localidad", "categoria", "concejal"):
                 self.asegurar_texto(conexion, nombre)
+            conexion.execute(
+                """
+                CREATE TABLE IF NOT EXISTS concejales (
+                    id TEXT PRIMARY KEY,
+                    nombre TEXT NOT NULL,
+                    cedula TEXT NOT NULL,
+                    telefono TEXT NOT NULL,
+                    partido TEXT NOT NULL,
+                    tarjeton TEXT NOT NULL,
+                    creado_en TEXT NOT NULL
+                )
+                """
+            )
+            conexion.execute("CREATE UNIQUE INDEX IF NOT EXISTS concejales_cedula ON concejales (cedula)")
 
     def asegurar_audio(self, conexion):
         if "audio" in self.columnas(conexion):
@@ -208,6 +222,63 @@ class Almacen:
             cursor = conexion.execute(consulta, tuple(validos))
             return cursor.rowcount
 
+    def listar_concejales(self):
+        with self.sesion() as conexion:
+            filas = conexion.execute(
+                """
+                SELECT id, nombre, cedula, telefono, partido, tarjeton, creado_en
+                FROM concejales
+                ORDER BY nombre
+                """
+            ).fetchall()
+        return [concejal_a_json(fila) for fila in filas]
+
+    def guardar_concejal(self, datos):
+        nombre = campo(datos.get("nombre"), 80)
+        cedula = "".join(letra for letra in campo(datos.get("cedula"), 20) if letra.isdigit())
+        telefono = campo(datos.get("telefono"), 30)
+        partido = campo(datos.get("partido"), 80)
+        tarjeton = "".join(letra for letra in campo(datos.get("tarjeton"), 10) if letra.isdigit())
+        if not nombre or len(cedula) < 5 or not telefono or not partido or not tarjeton:
+            raise ValueError("Completa nombre, cédula, teléfono, partido y número de tarjetón")
+        marca = "%s" if self.postgres else "?"
+        with self.sesion() as conexion:
+            repetida = conexion.execute(
+                f"SELECT id FROM concejales WHERE cedula = {marca}",
+                (cedula,),
+            ).fetchone()
+            if repetida is not None:
+                raise ValueError("Ya existe un concejal con esa cédula")
+            registro = {
+                "id": uuid4().hex,
+                "nombre": nombre,
+                "cedula": cedula,
+                "telefono": telefono,
+                "partido": partido,
+                "tarjeton": tarjeton,
+                "creado_en": datetime.now(ZoneInfo("UTC")).isoformat(),
+            }
+            columnas = list(registro.keys())
+            sql = (
+                f"INSERT INTO concejales ({', '.join(columnas)}) "
+                f"VALUES ({', '.join(marca for _ in columnas)})"
+            )
+            conexion.execute(sql, tuple(registro.values()))
+        return concejal_a_json(registro)
+
+
+def concejal_a_json(fila):
+    if not isinstance(fila, dict):
+        fila = dict(fila)
+    return {
+        "id": fila["id"],
+        "nombre": fila["nombre"],
+        "cedula": fila["cedula"],
+        "telefono": fila["telefono"],
+        "partido": fila["partido"],
+        "tarjeton": fila["tarjeton"],
+    }
+
 
 def decodificar_audio(valor):
     if valor in (None, ""):
@@ -254,7 +325,7 @@ def etiqueta_informe(valor, mapa):
     return mapa.get(valor, valor)
 
 
-def construir_informe(filas):
+def construir_informe(filas, concejales=None):
     libro = Workbook()
     hoja = libro.active
     hoja.title = "Encuestas"
@@ -291,6 +362,35 @@ def construir_informe(filas):
     hoja.page_setup.fitToWidth = 1
     hoja.page_setup.fitToHeight = 0
     hoja.sheet_properties.pageSetUpPr.fitToPage = True
+    if concejales is not None:
+        hoja_concejales = libro.create_sheet("Concejales")
+        titulos = [
+            ("Nombre", 28),
+            ("Cédula", 16),
+            ("Teléfono", 16),
+            ("Partido", 24),
+            ("Número de tarjetón", 20),
+        ]
+        for columna, (titulo, ancho) in enumerate(titulos, start=1):
+            celda = hoja_concejales.cell(1, columna, titulo)
+            celda.font = Font(bold=True, color="FFFFFF")
+            celda.fill = PatternFill("solid", fgColor="0B57D0")
+            hoja_concejales.column_dimensions[get_column_letter(columna)].width = ancho
+        for fila_n, item in enumerate(concejales, start=2):
+            valores = [
+                item.get("nombre") or "",
+                item.get("cedula") or "",
+                item.get("telefono") or "",
+                item.get("partido") or "",
+                item.get("tarjeton") or "",
+            ]
+            for columna, valor in enumerate(valores, start=1):
+                celda = hoja_concejales.cell(fila_n, columna, valor)
+                if columna in (2, 3, 5):
+                    celda.number_format = "@"
+        ultima_concejal = max(1, len(concejales) + 1)
+        hoja_concejales.auto_filter.ref = f"A1:E{ultima_concejal}"
+        hoja_concejales.freeze_panes = "A2"
     buffer = BytesIO()
     libro.save(buffer)
     return buffer.getvalue()
@@ -407,7 +507,7 @@ def borrar_respuestas():
 def descargar_informe():
     if not es_admin():
         return jsonify(error="Inicia sesión para descargar el informe"), 401
-    contenido = construir_informe(almacen.listar())
+    contenido = construir_informe(almacen.listar(), almacen.listar_concejales())
     fecha = datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d")
     nombre = f"vozcomunidad-{fecha}.xlsx"
     return Response(
@@ -417,9 +517,31 @@ def descargar_informe():
     )
 
 
+@app.get("/api/concejales")
+def listar_concejales():
+    lista = almacen.listar_concejales()
+    if es_admin():
+        return jsonify(lista)
+    return jsonify([{"id": item["id"], "nombre": item["nombre"], "partido": item["partido"], "tarjeton": item["tarjeton"]} for item in lista])
+
+
+@app.post("/api/concejales")
+def crear_concejal():
+    if not es_admin():
+        return jsonify(error="Inicia sesión para crear concejales"), 401
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        return jsonify(error="El envío tiene que ser JSON"), 400
+    try:
+        creado = almacen.guardar_concejal(datos)
+    except ValueError as error:
+        return jsonify(error=str(error)), 400
+    return jsonify(creado), 201
+
+
 @app.get("/salud")
 def salud():
-    return jsonify(audio=True, version=9)
+    return jsonify(audio=True, version=10)
 
 
 def tipo_audio(contenido):

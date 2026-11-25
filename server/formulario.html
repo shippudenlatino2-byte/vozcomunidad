@@ -329,7 +329,9 @@
         <div class="etiqueta">Concejal</div>
         <span class="porcentaje" style="color:var(--suave)">Opcional</span>
       </div>
-      <input id="concejal" maxlength="80" placeholder="Concejal" autocomplete="off">
+      <select id="concejal" aria-label="Concejal">
+        <option value="">Sin concejal</option>
+      </select>
       <p id="aviso-concejal" class="nota-concejal" hidden></p>
     </section>
 
@@ -382,11 +384,12 @@
   </div>
 
   <script>
-    const campos = ["nombre", "telefono", "direccion", "barrio", "opinion", "concejal"].reduce((mapa, id) => {
+    const campos = ["nombre", "telefono", "direccion", "barrio", "opinion"].reduce((mapa, id) => {
       mapa[id] = document.querySelector("#" + id);
       return mapa;
     }, {});
     const aviso = document.querySelector("#aviso");
+    const concejalCampo = document.querySelector("#concejal");
     const capa = document.querySelector("#capa");
     const errorClave = document.querySelector("#error-clave");
     let canal = "WHATSAPP";
@@ -540,7 +543,7 @@
         direccion: campos.direccion.value,
         barrio: campos.barrio.value,
         localidad: document.querySelector("#localidad").value,
-        concejal: campos.concejal.value,
+        concejal: concejalCampo.value,
         opinion: campos.opinion.value,
         canal,
         categoria,
@@ -551,6 +554,7 @@
       detenerGrabacion();
       Object.values(campos).forEach((campo) => { campo.value = ""; });
       document.querySelector("#localidad").selectedIndex = 0;
+      concejalCampo.selectedIndex = 0;
       ocultarAvisoConcejal();
       elegirCanal("WHATSAPP");
       categoria = "";
@@ -598,8 +602,8 @@
             boton.classList.toggle("activa", boton.dataset.categoria === categoria);
           });
         }
+        if (datos.concejal) concejalCampo.dataset.pendiente = datos.concejal;
         avance();
-        revisarConcejal();
       } catch (error) {
         localStorage.removeItem("voz-borrador");
       }
@@ -694,8 +698,34 @@
       esperaConcejal = setTimeout(revisarConcejal, 400);
     }
 
-    campos.concejal.addEventListener("input", programarRevisionConcejal);
     campos.telefono.addEventListener("input", programarRevisionConcejal);
+    concejalCampo.addEventListener("change", revisarConcejal);
+
+    function opcionConcejal(valor, texto) {
+      const nodo = document.createElement("option");
+      nodo.value = valor;
+      nodo.textContent = texto;
+      return nodo;
+    }
+
+    async function cargarConcejales() {
+      try {
+        const respuesta = await fetch("/api/concejales", { cache: "no-store" });
+        if (!respuesta.ok) return;
+        const lista = await respuesta.json();
+        const elegido = concejalCampo.dataset.pendiente || concejalCampo.value;
+        concejalCampo.replaceChildren(opcionConcejal("", "Sin concejal"));
+        lista.forEach((item) => {
+          const detalle = [item.partido, item.tarjeton ? `Tarjetón ${item.tarjeton}` : ""].filter(Boolean).join(" · ");
+          concejalCampo.append(opcionConcejal(item.nombre, detalle ? `${item.nombre} · ${detalle}` : item.nombre));
+        });
+        if ([...concejalCampo.options].some((opcion) => opcion.value === elegido)) concejalCampo.value = elegido;
+        delete concejalCampo.dataset.pendiente;
+        revisarConcejal();
+      } catch (error) {
+        return;
+      }
+    }
 
     document.querySelector("#enviar").addEventListener("click", async () => {
       if (enviando) return;
@@ -776,6 +806,7 @@
     });
 
     restaurarBorrador();
+    cargarConcejales();
     avance();
     pintarMic();
     if (new URLSearchParams(location.search).get("entrar") === "1") mostrarAcceso();

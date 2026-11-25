@@ -103,10 +103,21 @@
     .opinion { margin: 12px 0; line-height: 1.45; white-space: pre-wrap; }
     audio { width: 100%; }
     .aviso { color: var(--suave); }
+    .pestanas { display: flex; gap: 8px; margin-bottom: 16px; }
+    .pestanas button { background: white; color: var(--texto); border: 1px solid var(--linea); }
+    .pestanas button.activa { background: var(--azul); color: white; border-color: var(--azul); }
+    .form-concejal { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+    .form-concejal label { display: grid; gap: 6px; color: var(--suave); font-size: 13px; }
+    .form-concejal button { align-self: end; }
+    table.lista-concejales { width: 100%; border-collapse: collapse; }
+    table.lista-concejales th, table.lista-concejales td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--linea); vertical-align: top; }
+    table.lista-concejales th { color: var(--suave); font-size: 13px; font-weight: 700; }
+    #vista-concejales .tarjeta + .tarjeta { margin-top: 12px; }
+    #lista-concejales { overflow-x: auto; }
     .vacio, #estado { color: var(--suave); }
     @media (max-width: 800px) {
       header, main { padding-left: 16px; padding-right: 16px; }
-      .cifras, .paneles, .filtros { grid-template-columns: 1fr; }
+      .cifras, .paneles, .filtros, .form-concejal { grid-template-columns: 1fr; }
       header { align-items: flex-start; flex-direction: column; }
     }
   </style>
@@ -126,6 +137,11 @@
     </div>
   </header>
   <main>
+    <nav class="pestanas" aria-label="Secciones del panel">
+      <button id="tab-encuestas" class="activa" type="button">Encuestas</button>
+      <button id="tab-concejales" type="button">Concejales</button>
+    </nav>
+    <div id="vista-encuestas">
     <section class="cifras" id="cifras"></section>
     <section class="paneles">
       <article class="tarjeta">
@@ -155,6 +171,35 @@
     </div>
     <section id="lista"></section>
     <p id="estado"></p>
+    </div>
+    <div id="vista-concejales" hidden>
+      <article class="tarjeta">
+        <h2>Nuevo concejal</h2>
+        <form id="form-concejal" class="form-concejal">
+          <label>Nombre
+            <input name="nombre" maxlength="80" required placeholder="Nombre y apellido" autocomplete="name">
+          </label>
+          <label>Cédula
+            <input name="cedula" maxlength="20" required inputmode="numeric" placeholder="Cédula" autocomplete="off">
+          </label>
+          <label>Teléfono
+            <input name="telefono" maxlength="30" required inputmode="tel" placeholder="300 123 4567" autocomplete="tel">
+          </label>
+          <label>Partido
+            <input name="partido" maxlength="80" required placeholder="Partido" autocomplete="organization">
+          </label>
+          <label>Número de tarjetón
+            <input name="tarjeton" maxlength="10" required inputmode="numeric" placeholder="Número" autocomplete="off">
+          </label>
+          <button type="submit">Crear concejal</button>
+        </form>
+        <p id="estado-concejal" class="aviso"></p>
+      </article>
+      <article class="tarjeta">
+        <h2>Concejales creados</h2>
+        <div id="lista-concejales"></div>
+      </article>
+    </div>
   </main>
   <script>
     const cifras = document.querySelector("#cifras");
@@ -431,6 +476,92 @@
         estado.textContent = "No se pudo descargar el informe.";
       } finally {
         boton.disabled = false;
+      }
+    });
+    function mostrarSeccion(nombre) {
+      const encuestas = nombre === "encuestas";
+      document.querySelector("#vista-encuestas").hidden = !encuestas;
+      document.querySelector("#vista-concejales").hidden = encuestas;
+      document.querySelector("#tab-encuestas").classList.toggle("activa", encuestas);
+      document.querySelector("#tab-concejales").classList.toggle("activa", !encuestas);
+      document.querySelector("#descargar").hidden = !encuestas;
+      if (!encuestas) cargarConcejales();
+    }
+
+    function pintarConcejales(lista) {
+      const contenedor = document.querySelector("#lista-concejales");
+      if (!lista.length) {
+        contenedor.innerHTML = `<p class="vacio">Todavía no hay concejales. Crea el primero con el formulario.</p>`;
+        return;
+      }
+      contenedor.innerHTML = `
+        <table class="lista-concejales">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Cédula</th>
+              <th>Teléfono</th>
+              <th>Partido</th>
+              <th>Tarjetón</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lista.map((item) => `
+              <tr>
+                <td>${esc(item.nombre)}</td>
+                <td>${esc(item.cedula)}</td>
+                <td>${esc(item.telefono)}</td>
+                <td>${esc(item.partido)}</td>
+                <td>${esc(item.tarjeton)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    async function cargarConcejales() {
+      const estadoConcejal = document.querySelector("#estado-concejal");
+      try {
+        const respuesta = await fetch("/api/concejales", { cache: "no-store" });
+        if (respuesta.status === 401) {
+          location.href = "/?entrar=1";
+          return;
+        }
+        if (!respuesta.ok) throw new Error("concejales");
+        pintarConcejales(await respuesta.json());
+      } catch (error) {
+        estadoConcejal.textContent = "No se pudo cargar la lista de concejales.";
+      }
+    }
+
+    document.querySelector("#tab-encuestas").addEventListener("click", () => mostrarSeccion("encuestas"));
+    document.querySelector("#tab-concejales").addEventListener("click", () => mostrarSeccion("concejales"));
+    document.querySelector("#form-concejal").addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      const formulario = evento.currentTarget;
+      const estadoConcejal = document.querySelector("#estado-concejal");
+      const datos = Object.fromEntries(new FormData(formulario));
+      estadoConcejal.textContent = "Guardando concejal…";
+      try {
+        const respuesta = await fetch("/api/concejales", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(datos),
+        });
+        const cuerpo = await respuesta.json().catch(() => ({}));
+        if (respuesta.status === 401) {
+          location.href = "/?entrar=1";
+          return;
+        }
+        if (!respuesta.ok) throw new Error(cuerpo.error || "guardar");
+        formulario.reset();
+        estadoConcejal.textContent = "Concejal creado.";
+        await cargarConcejales();
+      } catch (error) {
+        estadoConcejal.textContent = error.message && error.message !== "guardar"
+          ? error.message
+          : "No se pudo crear el concejal.";
       }
     });
     document.querySelector("#actualizar").addEventListener("click", cargar);
