@@ -120,6 +120,7 @@
     </div>
     <div class="acciones-top">
       <a class="enlace" href="/">Formulario</a>
+      <button id="descargar" type="button" class="secundario">Descargar Excel</button>
       <button id="salir" type="button" class="secundario">Salir</button>
       <button id="actualizar" type="button">Actualizar</button>
     </div>
@@ -404,6 +405,32 @@
       }
     }
 
+    document.querySelector("#descargar").addEventListener("click", async () => {
+      const boton = document.querySelector("#descargar");
+      boton.disabled = true;
+      estado.textContent = "Preparando el informe…";
+      try {
+        const respuesta = await fetch("/api/informe.xlsx", { cache: "no-store" });
+        if (respuesta.status === 401) {
+          location.href = "/?entrar=1";
+          return;
+        }
+        if (!respuesta.ok) throw new Error("informe");
+        const archivo = await respuesta.blob();
+        const enlace = document.createElement("a");
+        const direccion = URL.createObjectURL(archivo);
+        const hoy = new Date().toISOString().slice(0, 10);
+        enlace.href = direccion;
+        enlace.download = `vozcomunidad-${hoy}.xlsx`;
+        enlace.click();
+        URL.revokeObjectURL(direccion);
+        estado.textContent = "Informe descargado.";
+      } catch (error) {
+        estado.textContent = "No se pudo descargar el informe.";
+      } finally {
+        boton.disabled = false;
+      }
+    });
     document.querySelector("#actualizar").addEventListener("click", cargar);
     document.querySelector("#salir").addEventListener("click", async () => {
       await fetch("/api/sesion", { method: "DELETE" });

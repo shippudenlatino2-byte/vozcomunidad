@@ -6,10 +6,14 @@ import time
 import base64
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from io import BytesIO
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from flask import Flask, Response, jsonify, redirect, request, session
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
 from pathlib import Path
 
 app = Flask(__name__)
@@ -220,6 +224,75 @@ def decodificar_audio(valor):
     return contenido
 
 
+CANALES = {"WHATSAPP": "WhatsApp", "LLAMADA": "Llamada"}
+CATEGORIAS = {
+    "SEGURIDAD": "Seguridad",
+    "SERVICIOS": "Servicios públicos",
+    "INFRAESTRUCTURA": "Infraestructura",
+    "AMBIENTE": "Medio ambiente",
+}
+COLUMNAS_INFORME = [
+    ("Nombre", 28),
+    ("Teléfono", 16),
+    ("Contacto", 14),
+    ("Dirección", 36),
+    ("Barrio", 22),
+    ("Localidad", 22),
+    ("Categoría", 22),
+    ("Opinión", 48),
+    ("Nota de voz", 14),
+    ("Duración (segundos)", 20),
+    ("Fecha", 22),
+]
+
+
+def etiqueta_informe(valor, mapa):
+    if not valor:
+        return ""
+    return mapa.get(valor, valor)
+
+
+def construir_informe(filas):
+    libro = Workbook()
+    hoja = libro.active
+    hoja.title = "Encuestas"
+    for columna, (titulo, ancho) in enumerate(COLUMNAS_INFORME, start=1):
+        celda = hoja.cell(1, columna, titulo)
+        celda.font = Font(bold=True, color="FFFFFF")
+        celda.fill = PatternFill("solid", fgColor="0B57D0")
+        celda.alignment = Alignment(vertical="center")
+        hoja.column_dimensions[get_column_letter(columna)].width = ancho
+    for fila_n, item in enumerate(filas, start=2):
+        tiene_audio = bool(item.get("tieneAudio"))
+        valores = [
+            item.get("nombre") or "",
+            item.get("telefono") or "",
+            etiqueta_informe(item.get("canal"), CANALES),
+            item.get("direccion") or "",
+            item.get("barrio") or "",
+            item.get("localidad") or "",
+            etiqueta_informe(item.get("categoria"), CATEGORIAS),
+            item.get("opinion") or "",
+            "Sí" if tiene_audio else "No",
+            int(item.get("duracionSeg") or 0) if tiene_audio else 0,
+            item.get("momento") or "",
+        ]
+        for columna, valor in enumerate(valores, start=1):
+            celda = hoja.cell(fila_n, columna, valor)
+            celda.alignment = Alignment(vertical="top", wrap_text=columna == 8)
+        hoja.cell(fila_n, 2).number_format = "@"
+    ultima = max(1, len(filas) + 1)
+    hoja.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNAS_INFORME))}{ultima}"
+    hoja.freeze_panes = "A2"
+    hoja.page_setup.orientation = "landscape"
+    hoja.page_setup.fitToWidth = 1
+    hoja.page_setup.fitToHeight = 0
+    hoja.sheet_properties.pageSetUpPr.fitToPage = True
+    buffer = BytesIO()
+    libro.save(buffer)
+    return buffer.getvalue()
+
+
 def fila_a_json(fila):
     if not isinstance(fila, dict):
         fila = dict(fila)
@@ -326,9 +399,23 @@ def borrar_respuestas():
     return jsonify(eliminadas=almacen.eliminar(identificadores))
 
 
+@app.get("/api/informe.xlsx")
+def descargar_informe():
+    if not es_admin():
+        return jsonify(error="Inicia sesión para descargar el informe"), 401
+    contenido = construir_informe(almacen.listar())
+    fecha = datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d")
+    nombre = f"vozcomunidad-{fecha}.xlsx"
+    return Response(
+        contenido,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
+    )
+
+
 @app.get("/salud")
 def salud():
-    return jsonify(audio=True, version=7)
+    return jsonify(audio=True, version=8)
 
 
 def tipo_audio(contenido):
