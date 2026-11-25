@@ -53,6 +53,7 @@ object ComunidadApi {
             .put("localidad", borrador.localidad)
             .put("canal", borrador.canal)
             .put("categoria", borrador.categoria)
+            .put("concejal", borrador.concejal)
             .put("opinion", borrador.opinion)
             .put("tieneAudio", audio != null && audio.isNotEmpty())
             .put("duracionSeg", if (audio != null && audio.isNotEmpty()) borrador.duracionSeg else 0)
@@ -147,5 +148,6 @@ object ComunidadApi {
         direccion = objeto.optString("direccion"),
         localidad = objeto.optString("localidad"),
         categoria = objeto.optString("categoria"),
+        concejal = objeto.optString("concejal"),
     )
 }

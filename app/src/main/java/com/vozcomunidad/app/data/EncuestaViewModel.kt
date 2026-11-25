@@ -27,6 +27,7 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
     var barrio by mutableStateOf("")
     var localidad by mutableStateOf("Comuna / Localidad Centro")
     var opinion by mutableStateOf("")
+    var concejal by mutableStateOf("")
     var grabando by mutableStateOf(false)
     var segundos by mutableStateOf(0)
     var audioListo by mutableStateOf(false)
@@ -40,6 +41,8 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
     var enviando by mutableStateOf(false)
         private set
     var aviso by mutableStateOf<Aviso?>(null)
+        private set
+    var conflictoConcejal by mutableStateOf<String?>(null)
         private set
 
     private var grabador: MediaRecorder? = null
@@ -84,6 +87,11 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
 
     fun consumirAviso(marca: Long) {
         if (aviso?.marca == marca) aviso = null
+    }
+
+    private fun normalizar(valor: String): String {
+        val limpio = java.text.Normalizer.normalize(valor.trim().lowercase(), java.text.Normalizer.Form.NFD)
+        return limpio.replace(Regex("\\p{Mn}+"), "").replace(Regex("\\s+"), " ")
     }
 
     fun alternarGrabacion() {
@@ -185,7 +193,9 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
         barrio = ""
         localidad = localidades.first()
         opinion = ""
+        concejal = ""
         categoria = null
+        conflictoConcejal = null
     }
 
     fun guardarBorrador() {
@@ -220,13 +230,44 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
         }
     }
 
-    fun enviar(alTerminar: (Boolean) -> Unit) {
+    fun avisoConcejal(): String? {
+        val escrito = normalizar(concejal)
+        val numero = telefono.filter { it.isDigit() }
+        if (escrito.isEmpty() || numero.length < 7) return null
+        val otros = respuestas.mapNotNull { item ->
+            val previo = item.concejal.trim()
+            if (item.telefono.filter { it.isDigit() } != numero) return@mapNotNull null
+            if (previo.isEmpty() || normalizar(previo) == escrito) return@mapNotNull null
+            previo
+        }.distinctBy { normalizar(it) }
+        if (otros.isEmpty()) return null
+        return if (otros.size == 1) {
+            "Esta persona ya está registrada con el concejal ${otros[0]}."
+        } else {
+            "Esta persona ya está registrada con otros concejales: ${otros.joinToString(", ")}."
+        }
+    }
+
+    fun cancelarConflictoConcejal() {
+        conflictoConcejal = null
+    }
+
+    fun enviar(alTerminar: (Boolean) -> Unit, forzar: Boolean = false) {
         if (enviando) return
         if (nombre.isBlank() || telefono.isBlank() || opinion.isBlank()) {
             avisar("Completa nombre, teléfono y la opinión")
             alTerminar(false)
             return
         }
+        if (!forzar) {
+            val otro = avisoConcejal()
+            if (otro != null) {
+                conflictoConcejal = otro
+                alTerminar(false)
+                return
+            }
+        }
+        conflictoConcejal = null
         enviando = true
         avisar("Guardando en la comunidad…")
         val duracion = segundos
@@ -254,6 +295,7 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
                         direccion = direccion.trim(),
                         localidad = localidad.trim(),
                         categoria = categoria?.name ?: "",
+                        concejal = concejal.trim(),
                     )
                     val guardada = ComunidadApi.publicar(borrador, archivo?.readBytes())
                     if (archivo != null) guardarCopia(guardada.id, archivo)

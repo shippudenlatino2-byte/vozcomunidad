@@ -29,6 +29,7 @@ data class Respuesta(
     val direccion: String = "",
     val localidad: String = "",
     val categoria: String = "",
+    val concejal: String = "",
 )
 
 fun formatoTiempo(segundos: Int): String {

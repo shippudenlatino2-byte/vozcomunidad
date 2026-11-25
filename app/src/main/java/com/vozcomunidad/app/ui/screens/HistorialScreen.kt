@@ -181,7 +181,9 @@ fun HistorialScreen(
                                 compartirTexto(
                                     contexto,
                                     "Respuesta de ${respuesta.nombre}",
-                                    "${respuesta.nombre} · ${respuesta.barrio}\n${respuesta.opinion}",
+                                    "${respuesta.nombre} · ${respuesta.barrio}" +
+                                        (if (respuesta.concejal.isNotBlank()) "\nConcejal: ${respuesta.concejal}" else "") +
+                                        "\n${respuesta.opinion}",
                                 )
                             } catch (_: ActivityNotFoundException) {
                                 vm.avisar("No hay una app para compartir")
@@ -355,6 +357,10 @@ private fun TarjetaRespuesta(
                     Tx(respuesta.barrio, color = tintaBarrio, size = 11.sp, peso = FontWeight.Bold)
                 }
             }
+        }
+        if (respuesta.concejal.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Tx("Concejal ${respuesta.concejal}", color = Vz.Secondary, size = 13.sp, peso = FontWeight.SemiBold)
         }
         Spacer(Modifier.height(12.dp))
         if (respuesta.tieneAudio) {

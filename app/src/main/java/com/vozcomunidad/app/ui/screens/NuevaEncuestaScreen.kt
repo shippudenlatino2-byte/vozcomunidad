@@ -23,7 +23,7 @@ import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Call
@@ -37,9 +37,11 @@ import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.Replay
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -77,6 +79,23 @@ fun NuevaEncuestaScreen(
     onAbrirGrabacion: () -> Unit,
     onEnviada: () -> Unit,
 ) {
+    val conflicto = vm.conflictoConcejal
+    if (conflicto != null) {
+        AlertDialog(
+            onDismissRequest = vm::cancelarConflictoConcejal,
+            containerColor = Vz.SurfaceContainerLowest,
+            title = { Tx("Otro concejal", size = 18.sp, peso = FontWeight.Bold) },
+            text = { Tx("$conflicto ¿Deseas enviarla de todos modos?", color = Vz.OnSurfaceVariant, size = 15.sp, alto = 22.sp) },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.enviar(forzar = true) { enviada -> if (enviada) onEnviada() }
+                }) { Tx("Enviar", color = Vz.Primary, peso = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = vm::cancelarConflictoConcejal) { Tx("Cancelar", color = Vz.OnSurfaceVariant, peso = FontWeight.SemiBold) }
+            },
+        )
+    }
     val scroll = rememberScrollState()
     Column(
         modifier = Modifier
@@ -91,6 +110,7 @@ fun NuevaEncuestaScreen(
         TarjetaNombre(vm)
         TarjetaTelefono(vm)
         TarjetaUbicacion(vm)
+        TarjetaConcejal(vm)
         TarjetaOpinion(vm, onAbrirGrabacion)
         BotonPrimario(
             texto = if (vm.enviando) "Enviando a la comunidad…" else "Guardar y Enviar Encuesta",
@@ -358,6 +378,42 @@ private fun CanalBoton(
             size = 11.sp,
             peso = FontWeight.Bold,
         )
+    }
+}
+
+@Composable
+private fun TarjetaConcejal(vm: EncuestaViewModel) {
+    val aviso = vm.avisoConcejal()
+    Column(
+        modifier = Modifier.tarjeta().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.AccountBalance, contentDescription = null, tint = Vz.Primary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Tx("Concejal", size = 13.sp, peso = FontWeight.SemiBold)
+            }
+            Tx("Opcional", color = Vz.OnSurfaceVariant, size = 11.sp, peso = FontWeight.SemiBold)
+        }
+        CampoLinea(
+            valor = vm.concejal,
+            alCambiar = { vm.concejal = it },
+            placeholder = "Concejal",
+        )
+        if (aviso != null) {
+            Tx(
+                aviso,
+                color = Vz.Secondary,
+                size = 13.sp,
+                alto = 18.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Vz.SecondaryFixed)
+                    .padding(10.dp),
+            )
+        }
     }
 }
 
