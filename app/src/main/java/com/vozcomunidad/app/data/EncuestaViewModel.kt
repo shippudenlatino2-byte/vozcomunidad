@@ -252,7 +252,7 @@ class EncuestaViewModel(application: android.app.Application) : AndroidViewModel
         conflictoConcejal = null
     }
 
-    fun enviar(alTerminar: (Boolean) -> Unit, forzar: Boolean = false) {
+    fun enviar(forzar: Boolean = false, alTerminar: (Boolean) -> Unit) {
         if (enviando) return
         if (nombre.isBlank() || telefono.isBlank() || opinion.isBlank()) {
             avisar("Completa nombre, teléfono y la opinión")
