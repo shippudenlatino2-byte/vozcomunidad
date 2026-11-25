@@ -106,18 +106,21 @@
     .pestanas { display: flex; gap: 8px; margin-bottom: 16px; }
     .pestanas button { background: white; color: var(--texto); border: 1px solid var(--linea); }
     .pestanas button.activa { background: var(--azul); color: white; border-color: var(--azul); }
-    .form-concejal { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
-    .form-concejal label { display: grid; gap: 6px; color: var(--suave); font-size: 13px; }
-    .form-concejal button { align-self: end; }
-    table.lista-concejales { width: 100%; border-collapse: collapse; }
-    table.lista-concejales th, table.lista-concejales td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--linea); vertical-align: top; }
-    table.lista-concejales th { color: var(--suave); font-size: 13px; font-weight: 700; }
-    #vista-concejales .tarjeta + .tarjeta { margin-top: 12px; }
-    #lista-concejales { overflow-x: auto; }
+    .form-concejal, .form-lider { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+    .form-concejal label, .form-lider label { display: grid; gap: 6px; color: var(--suave); font-size: 13px; }
+    .form-concejal button, .form-lider button { align-self: end; }
+    .form-lider button { grid-column: 1 / -1; }
+    .form-lider select, .form-lider input, .form-concejal input { width: 100%; }
+    table.lista-concejales, table.lista-lideres { width: 100%; border-collapse: collapse; }
+    table.lista-concejales th, table.lista-concejales td,
+    table.lista-lideres th, table.lista-lideres td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--linea); vertical-align: top; }
+    table.lista-concejales th, table.lista-lideres th { color: var(--suave); font-size: 13px; font-weight: 700; }
+    #vista-concejales .tarjeta + .tarjeta, #vista-lideres .tarjeta + .tarjeta { margin-top: 12px; }
+    #lista-concejales, #lista-lideres { overflow-x: auto; }
     .vacio, #estado { color: var(--suave); }
     @media (max-width: 800px) {
       header, main { padding-left: 16px; padding-right: 16px; }
-      .cifras, .paneles, .filtros, .form-concejal { grid-template-columns: 1fr; }
+      .cifras, .paneles, .filtros, .form-concejal, .form-lider { grid-template-columns: 1fr; }
       header { align-items: flex-start; flex-direction: column; }
     }
   </style>
@@ -140,6 +143,7 @@
     <nav class="pestanas" aria-label="Secciones del panel">
       <button id="tab-encuestas" class="activa" type="button">Encuestas</button>
       <button id="tab-concejales" type="button">Concejales</button>
+      <button id="tab-lideres" type="button">Líderes</button>
     </nav>
     <div id="vista-encuestas">
     <section class="cifras" id="cifras"></section>
@@ -198,6 +202,39 @@
       <article class="tarjeta">
         <h2>Concejales creados</h2>
         <div id="lista-concejales"></div>
+      </article>
+    </div>
+    <div id="vista-lideres" hidden>
+      <article class="tarjeta">
+        <h2>Nuevo líder</h2>
+        <form id="form-lider" class="form-lider">
+          <label>Nombre completo
+            <input name="nombre" maxlength="120" required placeholder="Nombre y apellido" autocomplete="name">
+          </label>
+          <label>Cédula
+            <input name="cedula" maxlength="20" required inputmode="numeric" placeholder="Cédula" autocomplete="off">
+          </label>
+          <label>Teléfono
+            <input name="telefono" maxlength="30" required inputmode="tel" placeholder="300 123 4567" autocomplete="tel">
+          </label>
+          <label>Correo
+            <input name="correo" type="email" maxlength="120" required placeholder="correo@ejemplo.com" autocomplete="email">
+          </label>
+          <label>Barrio
+            <input name="barrio" maxlength="80" required placeholder="Barrio" autocomplete="off">
+          </label>
+          <label>Líder del candidato
+            <select id="candidato" name="candidato_id" required>
+              <option value="">Elige el candidato</option>
+            </select>
+          </label>
+          <button type="submit">Crear líder</button>
+        </form>
+        <p id="estado-lider" class="aviso"></p>
+      </article>
+      <article class="tarjeta">
+        <h2>Líderes creados</h2>
+        <div id="lista-lideres"></div>
       </article>
     </div>
   </main>
@@ -479,13 +516,13 @@
       }
     });
     function mostrarSeccion(nombre) {
-      const encuestas = nombre === "encuestas";
-      document.querySelector("#vista-encuestas").hidden = !encuestas;
-      document.querySelector("#vista-concejales").hidden = encuestas;
-      document.querySelector("#tab-encuestas").classList.toggle("activa", encuestas);
-      document.querySelector("#tab-concejales").classList.toggle("activa", !encuestas);
-      document.querySelector("#descargar").hidden = !encuestas;
-      if (!encuestas) cargarConcejales();
+      ["encuestas", "concejales", "lideres"].forEach((seccion) => {
+        document.querySelector("#vista-" + seccion).hidden = seccion !== nombre;
+        document.querySelector("#tab-" + seccion).classList.toggle("activa", seccion === nombre);
+      });
+      document.querySelector("#descargar").hidden = nombre !== "encuestas";
+      if (nombre === "concejales") cargarConcejales();
+      if (nombre === "lideres") cargarLideres();
     }
 
     function pintarConcejales(lista) {
@@ -535,8 +572,96 @@
       }
     }
 
+    function pintarLideres(lista) {
+      const contenedor = document.querySelector("#lista-lideres");
+      if (!lista.length) {
+        contenedor.innerHTML = `<p class="vacio">Todavía no hay líderes. Crea el primero con el formulario.</p>`;
+        return;
+      }
+      contenedor.innerHTML = `
+        <table class="lista-lideres">
+          <thead>
+            <tr>
+              <th>Nombre completo</th>
+              <th>Cédula</th>
+              <th>Teléfono</th>
+              <th>Correo</th>
+              <th>Barrio</th>
+              <th>Líder del candidato</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lista.map((item) => `
+              <tr>
+                <td>${esc(item.nombre)}</td>
+                <td>${esc(item.cedula)}</td>
+                <td>${esc(item.telefono)}</td>
+                <td>${esc(item.correo)}</td>
+                <td>${esc(item.barrio)}</td>
+                <td>${esc(item.candidato)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    async function cargarLideres() {
+      const estadoLider = document.querySelector("#estado-lider");
+      try {
+        const [respuesta, candidatos] = await Promise.all([
+          fetch("/api/lideres", { cache: "no-store" }),
+          fetch("/api/concejales", { cache: "no-store" }),
+        ]);
+        if (respuesta.status === 401 || candidatos.status === 401) {
+          location.href = "/?entrar=1";
+          return;
+        }
+        if (!respuesta.ok || !candidatos.ok) throw new Error("lideres");
+        const select = document.querySelector("#candidato");
+        const elegido = select.value;
+        select.replaceChildren(new Option("Elige el candidato", ""));
+        (await candidatos.json()).forEach((item) => select.append(new Option(item.nombre, item.id)));
+        if ([...select.options].some((opcion) => opcion.value === elegido)) select.value = elegido;
+        if (select.options.length === 1 && !estadoLider.textContent) {
+          estadoLider.textContent = "Crea primero el candidato en la pestaña Concejales.";
+        }
+        pintarLideres(await respuesta.json());
+      } catch (error) {
+        estadoLider.textContent = "No se pudo cargar la lista de líderes.";
+      }
+    }
+
     document.querySelector("#tab-encuestas").addEventListener("click", () => mostrarSeccion("encuestas"));
     document.querySelector("#tab-concejales").addEventListener("click", () => mostrarSeccion("concejales"));
+    document.querySelector("#tab-lideres").addEventListener("click", () => mostrarSeccion("lideres"));
+    document.querySelector("#form-lider").addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      const formulario = evento.currentTarget;
+      const estadoLider = document.querySelector("#estado-lider");
+      const datos = Object.fromEntries(new FormData(formulario));
+      estadoLider.textContent = "Guardando líder…";
+      try {
+        const respuesta = await fetch("/api/lideres", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(datos),
+        });
+        const cuerpo = await respuesta.json().catch(() => ({}));
+        if (respuesta.status === 401) {
+          location.href = "/?entrar=1";
+          return;
+        }
+        if (!respuesta.ok) throw new Error(cuerpo.error || "guardar");
+        formulario.reset();
+        estadoLider.textContent = "Líder creado.";
+        await cargarLideres();
+      } catch (error) {
+        estadoLider.textContent = error.message && error.message !== "guardar"
+          ? error.message
+          : "No se pudo crear el líder.";
+      }
+    });
     document.querySelector("#form-concejal").addEventListener("submit", async (evento) => {
       evento.preventDefault();
       const formulario = evento.currentTarget;

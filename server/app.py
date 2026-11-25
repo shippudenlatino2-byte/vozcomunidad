@@ -116,6 +116,22 @@ class Almacen:
                 """
             )
             conexion.execute("CREATE UNIQUE INDEX IF NOT EXISTS concejales_cedula ON concejales (cedula)")
+            conexion.execute(
+                """
+                CREATE TABLE IF NOT EXISTS lideres (
+                    id TEXT PRIMARY KEY,
+                    nombre TEXT NOT NULL,
+                    cedula TEXT NOT NULL,
+                    telefono TEXT NOT NULL,
+                    correo TEXT NOT NULL,
+                    barrio TEXT NOT NULL,
+                    candidato_id TEXT NOT NULL,
+                    candidato TEXT NOT NULL,
+                    creado_en TEXT NOT NULL
+                )
+                """
+            )
+            conexion.execute("CREATE UNIQUE INDEX IF NOT EXISTS lideres_cedula ON lideres (cedula)")
 
     def asegurar_audio(self, conexion):
         if "audio" in self.columnas(conexion):
@@ -266,6 +282,68 @@ class Almacen:
             conexion.execute(sql, tuple(registro.values()))
         return concejal_a_json(registro)
 
+    def listar_lideres(self):
+        with self.sesion() as conexion:
+            filas = conexion.execute(
+                """
+                SELECT id, nombre, cedula, telefono, correo, barrio, candidato_id, candidato, creado_en
+                FROM lideres
+                ORDER BY nombre
+                """
+            ).fetchall()
+        return [lider_a_json(fila) for fila in filas]
+
+    def guardar_lider(self, datos):
+        nombre = campo(datos.get("nombre"), 120)
+        cedula = "".join(letra for letra in campo(datos.get("cedula"), 20) if letra.isdigit())
+        telefono = campo(datos.get("telefono"), 30)
+        correo = correo_valido(datos.get("correo"))
+        barrio = campo(datos.get("barrio"), 80)
+        candidato_id = campo(datos.get("candidato_id"), 32)
+        if campo(datos.get("correo"), 120) and not correo:
+            raise ValueError("Escribe un correo válido")
+        if not nombre or len(cedula) < 5 or not telefono or not correo or not barrio or not candidato_id:
+            raise ValueError("Completa nombre, cédula, teléfono, correo, barrio y el candidato")
+        candidato = next((item for item in self.listar_concejales() if item["id"] == candidato_id), None)
+        if candidato is None:
+            raise ValueError("Elige un candidato creado en la pestaña Concejales")
+        marca = "%s" if self.postgres else "?"
+        with self.sesion() as conexion:
+            repetida = conexion.execute(
+                f"SELECT id FROM lideres WHERE cedula = {marca}",
+                (cedula,),
+            ).fetchone()
+            if repetida is not None:
+                raise ValueError("Ya existe un líder con esa cédula")
+            registro = {
+                "id": uuid4().hex,
+                "nombre": nombre,
+                "cedula": cedula,
+                "telefono": telefono,
+                "correo": correo,
+                "barrio": barrio,
+                "candidato_id": candidato_id,
+                "candidato": candidato["nombre"],
+                "creado_en": datetime.now(ZoneInfo("UTC")).isoformat(),
+            }
+            columnas = list(registro.keys())
+            sql = (
+                f"INSERT INTO lideres ({', '.join(columnas)}) "
+                f"VALUES ({', '.join(marca for _ in columnas)})"
+            )
+            conexion.execute(sql, tuple(registro.values()))
+        return lider_a_json(registro)
+
+
+def correo_valido(valor):
+    correo = campo(valor, 120).lower()
+    if " " in correo or correo.count("@") != 1:
+        return ""
+    local, dominio = correo.split("@")
+    if not local or "." not in dominio or dominio.startswith(".") or dominio.endswith("."):
+        return ""
+    return correo
+
 
 def concejal_a_json(fila):
     if not isinstance(fila, dict):
@@ -277,6 +355,21 @@ def concejal_a_json(fila):
         "telefono": fila["telefono"],
         "partido": fila["partido"],
         "tarjeton": fila["tarjeton"],
+    }
+
+
+def lider_a_json(fila):
+    if not isinstance(fila, dict):
+        fila = dict(fila)
+    return {
+        "id": fila["id"],
+        "nombre": fila["nombre"],
+        "cedula": fila["cedula"],
+        "telefono": fila["telefono"],
+        "correo": fila["correo"],
+        "barrio": fila["barrio"],
+        "candidatoId": fila["candidato_id"],
+        "candidato": fila["candidato"],
     }
 
 
@@ -325,7 +418,7 @@ def etiqueta_informe(valor, mapa):
     return mapa.get(valor, valor)
 
 
-def construir_informe(filas, concejales=None):
+def construir_informe(filas, concejales=None, lideres=None):
     libro = Workbook()
     hoja = libro.active
     hoja.title = "Encuestas"
@@ -391,6 +484,37 @@ def construir_informe(filas, concejales=None):
         ultima_concejal = max(1, len(concejales) + 1)
         hoja_concejales.auto_filter.ref = f"A1:E{ultima_concejal}"
         hoja_concejales.freeze_panes = "A2"
+    if lideres is not None:
+        hoja_lideres = libro.create_sheet("Lideres")
+        titulos_lider = [
+            ("Nombre completo", 32),
+            ("Cédula", 16),
+            ("Teléfono", 16),
+            ("Correo", 32),
+            ("Barrio", 24),
+            ("Líder del candidato", 28),
+        ]
+        for columna, (titulo, ancho) in enumerate(titulos_lider, start=1):
+            celda = hoja_lideres.cell(1, columna, titulo)
+            celda.font = Font(bold=True, color="FFFFFF")
+            celda.fill = PatternFill("solid", fgColor="0B57D0")
+            hoja_lideres.column_dimensions[get_column_letter(columna)].width = ancho
+        for fila_n, item in enumerate(lideres, start=2):
+            valores = [
+                item.get("nombre") or "",
+                item.get("cedula") or "",
+                item.get("telefono") or "",
+                item.get("correo") or "",
+                item.get("barrio") or "",
+                item.get("candidato") or "",
+            ]
+            for columna, valor in enumerate(valores, start=1):
+                celda = hoja_lideres.cell(fila_n, columna, valor)
+                if columna in (2, 3):
+                    celda.number_format = "@"
+        ultima_lider = max(1, len(lideres) + 1)
+        hoja_lideres.auto_filter.ref = f"A1:F{ultima_lider}"
+        hoja_lideres.freeze_panes = "A2"
     buffer = BytesIO()
     libro.save(buffer)
     return buffer.getvalue()
@@ -507,7 +631,7 @@ def borrar_respuestas():
 def descargar_informe():
     if not es_admin():
         return jsonify(error="Inicia sesión para descargar el informe"), 401
-    contenido = construir_informe(almacen.listar(), almacen.listar_concejales())
+    contenido = construir_informe(almacen.listar(), almacen.listar_concejales(), almacen.listar_lideres())
     fecha = datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d")
     nombre = f"vozcomunidad-{fecha}.xlsx"
     return Response(
@@ -539,9 +663,30 @@ def crear_concejal():
     return jsonify(creado), 201
 
 
+@app.get("/api/lideres")
+def listar_lideres():
+    if not es_admin():
+        return jsonify(error="Inicia sesión para ver los líderes"), 401
+    return jsonify(almacen.listar_lideres())
+
+
+@app.post("/api/lideres")
+def crear_lider():
+    if not es_admin():
+        return jsonify(error="Inicia sesión para crear líderes"), 401
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        return jsonify(error="El envío tiene que ser JSON"), 400
+    try:
+        creado = almacen.guardar_lider(datos)
+    except ValueError as error:
+        return jsonify(error=str(error)), 400
+    return jsonify(creado), 201
+
+
 @app.get("/salud")
 def salud():
-    return jsonify(audio=True, version=10)
+    return jsonify(audio=True, version=11)
 
 
 def tipo_audio(contenido):
