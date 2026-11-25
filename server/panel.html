@@ -182,7 +182,7 @@
       const barrio = filtroBarrio.value;
       const tipo = filtroTipo.value;
       return respuestas.filter((item) => {
-        const coincideTexto = !texto || [item.nombre, item.telefono, item.barrio, item.direccion, item.localidad, item.opinion]
+        const coincideTexto = !texto || [item.nombre, item.telefono, item.barrio, item.direccion, item.localidad, item.concejal, item.opinion]
           .join(" ").toLowerCase().includes(texto);
         const coincideBarrio = !barrio || item.barrio === barrio;
         const coincideTipo = !tipo || (tipo === "audio" ? item.tieneAudio : !item.tieneAudio);
@@ -267,7 +267,7 @@
             <input class="elegir" type="checkbox" value="${esc(item.id)}" ${seleccion.has(item.id) ? "checked" : ""}>
             Seleccionar
           </label>
-          <p><strong>${esc(item.momento || "Sin fecha")}</strong> · ${esc(categoria)}</p>
+          <p><strong>${esc(item.momento || "Sin fecha")}</strong> · ${esc(categoria)}${item.concejal ? ` · Concejal ${esc(item.concejal)}` : ""}</p>
           <p>${esc(item.opinion || "Sin opinión")}</p>
           ${audio}
         </div>
@@ -289,6 +289,7 @@
       lista.innerHTML = [...grupos.values()].map((grupo) => {
         const reciente = grupo[0];
         const canal = etiqueta(reciente.canal, { WHATSAPP: "WhatsApp", LLAMADA: "Llamada" });
+        const concejales = [...new Set(grupo.map((item) => (item.concejal || "").trim()).filter(Boolean))];
         const ids = grupo.map((item) => item.id).join(",");
         const todas = grupo.every((item) => seleccion.has(item.id));
         return `
@@ -306,6 +307,7 @@
               ${dato("Dirección", reciente.direccion)}
               ${dato("Barrio", reciente.barrio)}
               ${dato("Localidad", reciente.localidad)}
+              ${dato("Concejal", concejales.join(", "))}
             </dl>
             ${grupo.map(notaDe).join("")}
           </article>

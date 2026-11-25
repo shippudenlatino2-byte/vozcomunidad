@@ -213,6 +213,15 @@
     .limpiar { background: var(--low); color: #737686; }
     .legal { color: #737686; text-align: center; font-size: 13px; }
     .aviso { min-height: 1.2em; text-align: center; color: var(--primary); font-weight: 650; }
+    .nota-concejal {
+      margin: 10px 0 0;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #fff4df;
+      color: #8a5a00;
+      font-size: 14px;
+      line-height: 1.4;
+    }
     .capa {
       position: fixed;
       inset: 0;
@@ -316,6 +325,15 @@
     </section>
 
     <section class="tarjeta">
+      <div class="fila">
+        <div class="etiqueta">Concejal</div>
+        <span class="porcentaje" style="color:var(--suave)">Opcional</span>
+      </div>
+      <input id="concejal" maxlength="80" placeholder="Concejal" autocomplete="off">
+      <p id="aviso-concejal" class="nota-concejal" hidden></p>
+    </section>
+
+    <section class="tarjeta">
       <div class="etiqueta" style="font-size:18px">Opinión o Inquietud</div>
       <p class="ayuda">Describa la situación del parque, luminarias, seguridad o convivencia.</p>
       <textarea id="opinion" maxlength="2000" placeholder="Escriba aquí notas clave del testimonio o resumen de la solicitud ciudadana..."></textarea>
@@ -364,7 +382,7 @@
   </div>
 
   <script>
-    const campos = ["nombre", "telefono", "direccion", "barrio", "opinion"].reduce((mapa, id) => {
+    const campos = ["nombre", "telefono", "direccion", "barrio", "opinion", "concejal"].reduce((mapa, id) => {
       mapa[id] = document.querySelector("#" + id);
       return mapa;
     }, {});
@@ -522,6 +540,7 @@
         direccion: campos.direccion.value,
         barrio: campos.barrio.value,
         localidad: document.querySelector("#localidad").value,
+        concejal: campos.concejal.value,
         opinion: campos.opinion.value,
         canal,
         categoria,
@@ -532,6 +551,7 @@
       detenerGrabacion();
       Object.values(campos).forEach((campo) => { campo.value = ""; });
       document.querySelector("#localidad").selectedIndex = 0;
+      ocultarAvisoConcejal();
       elegirCanal("WHATSAPP");
       categoria = "";
       document.querySelectorAll(".tema").forEach((boton) => boton.classList.remove("activa"));
@@ -579,6 +599,7 @@
           });
         }
         avance();
+        revisarConcejal();
       } catch (error) {
         localStorage.removeItem("voz-borrador");
       }
@@ -609,12 +630,86 @@
       return audioBlob;
     }
 
+    function digitos(valor) {
+      return String(valor || "").replace(/\D/g, "");
+    }
+
+    function normalizar(valor) {
+      return String(valor || "").trim().toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ");
+    }
+
+    function textoConcejal(otros) {
+      if (otros.length === 1) {
+        return `Esta persona ya está registrada con el concejal ${otros[0]}.`;
+      }
+      return `Esta persona ya está registrada con otros concejales: ${otros.join(", ")}.`;
+    }
+
+    function ocultarAvisoConcejal() {
+      const caja = document.querySelector("#aviso-concejal");
+      caja.hidden = true;
+      caja.textContent = "";
+    }
+
+    function mostrarAvisoConcejal(texto) {
+      const caja = document.querySelector("#aviso-concejal");
+      caja.hidden = false;
+      caja.textContent = texto;
+    }
+
+    async function concejalesDistintos(datos) {
+      const concejal = normalizar(datos.concejal);
+      const telefono = digitos(datos.telefono);
+      if (!concejal || telefono.length < 7) return [];
+      try {
+        const respuesta = await fetch("/api/respuestas", { cache: "no-store" });
+        if (!respuesta.ok) return [];
+        const lista = await respuesta.json();
+        const otros = new Map();
+        lista.forEach((item) => {
+          if (digitos(item.telefono) !== telefono) return;
+          const previo = normalizar(item.concejal);
+          if (previo && previo !== concejal) otros.set(previo, String(item.concejal).trim());
+        });
+        return [...otros.values()];
+      } catch (error) {
+        return [];
+      }
+    }
+
+    let marcaConcejal = 0;
+    async function revisarConcejal() {
+      const marca = ++marcaConcejal;
+      const otros = await concejalesDistintos(leerFormulario());
+      if (marca !== marcaConcejal) return;
+      if (!otros.length) ocultarAvisoConcejal();
+      else mostrarAvisoConcejal(textoConcejal(otros));
+    }
+
+    let esperaConcejal = null;
+    function programarRevisionConcejal() {
+      clearTimeout(esperaConcejal);
+      esperaConcejal = setTimeout(revisarConcejal, 400);
+    }
+
+    campos.concejal.addEventListener("input", programarRevisionConcejal);
+    campos.telefono.addEventListener("input", programarRevisionConcejal);
+
     document.querySelector("#enviar").addEventListener("click", async () => {
       if (enviando) return;
       const datos = leerFormulario();
       if (!datos.nombre.trim() || !datos.telefono.trim() || !datos.opinion.trim()) {
         decir("Completa nombre, teléfono y la opinión");
         return;
+      }
+      const otros = await concejalesDistintos(datos);
+      if (otros.length) {
+        const texto = textoConcejal(otros);
+        mostrarAvisoConcejal(texto);
+        const sigue = confirm(`${texto} ¿Deseas enviarla de todos modos?`);
+        if (!sigue) return;
       }
       enviando = true;
       document.querySelector("#enviar").disabled = true;
@@ -629,6 +724,7 @@
           localidad: datos.localidad.trim(),
           canal: datos.canal,
           categoria: datos.categoria,
+          concejal: datos.concejal.trim(),
           opinion: datos.opinion.trim(),
           duracionSeg: nota && nota.size > 32 ? Math.max(1, segundos) : 0,
         };

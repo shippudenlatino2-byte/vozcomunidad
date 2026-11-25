@@ -100,7 +100,7 @@ class Almacen:
         with self.sesion() as conexion:
             conexion.execute(sql)
             self.asegurar_audio(conexion)
-            for nombre in ("canal", "direccion", "localidad", "categoria"):
+            for nombre in ("canal", "direccion", "localidad", "categoria", "concejal"):
                 self.asegurar_texto(conexion, nombre)
 
     def asegurar_audio(self, conexion):
@@ -125,7 +125,7 @@ class Almacen:
 
     def listar(self):
         consulta = """
-            SELECT id, nombre, telefono, barrio, direccion, localidad, canal, categoria,
+            SELECT id, nombre, telefono, barrio, direccion, localidad, canal, categoria, concejal,
                    opinion, momento, creado_en, tiene_audio, duracion_seg, estado, tono,
                    acento, urgente
             FROM respuestas
@@ -157,6 +157,7 @@ class Almacen:
             "localidad": campo(datos.get("localidad"), 80),
             "canal": campo(datos.get("canal"), 40),
             "categoria": campo(datos.get("categoria"), 40),
+            "concejal": campo(datos.get("concejal"), 80),
             "opinion": opinion,
             "momento": momento_local(),
             "creado_en": datetime.now(ZoneInfo("UTC")).isoformat(),
@@ -235,6 +236,7 @@ COLUMNAS_INFORME = [
     ("Nombre", 28),
     ("Teléfono", 16),
     ("Contacto", 14),
+    ("Concejal", 24),
     ("Dirección", 36),
     ("Barrio", 22),
     ("Localidad", 22),
@@ -268,6 +270,7 @@ def construir_informe(filas):
             item.get("nombre") or "",
             item.get("telefono") or "",
             etiqueta_informe(item.get("canal"), CANALES),
+            item.get("concejal") or "",
             item.get("direccion") or "",
             item.get("barrio") or "",
             item.get("localidad") or "",
@@ -279,7 +282,7 @@ def construir_informe(filas):
         ]
         for columna, valor in enumerate(valores, start=1):
             celda = hoja.cell(fila_n, columna, valor)
-            celda.alignment = Alignment(vertical="top", wrap_text=columna == 8)
+            celda.alignment = Alignment(vertical="top", wrap_text=columna == 9)
         hoja.cell(fila_n, 2).number_format = "@"
     ultima = max(1, len(filas) + 1)
     hoja.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNAS_INFORME))}{ultima}"
@@ -305,6 +308,7 @@ def fila_a_json(fila):
         "localidad": fila.get("localidad") or "",
         "canal": fila.get("canal") or "",
         "categoria": fila.get("categoria") or "",
+        "concejal": fila.get("concejal") or "",
         "opinion": fila["opinion"],
         "momento": fila["momento"],
         "tieneAudio": bool(fila["tiene_audio"]),
@@ -415,7 +419,7 @@ def descargar_informe():
 
 @app.get("/salud")
 def salud():
-    return jsonify(audio=True, version=8)
+    return jsonify(audio=True, version=9)
 
 
 def tipo_audio(contenido):
